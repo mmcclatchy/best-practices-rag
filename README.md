@@ -5,8 +5,8 @@ A Claude Code skill pipeline for technology best practices via Neo4j knowledge g
 ## Quick Start
 
 ```bash
-# Install the package
-uv add best-practices-rag
+# Install the package from GitHub
+uv add git+https://github.com/markmcclatchy/best-practices-rag.git
 
 # Copy agents, commands, and scripts to your .claude/ directory
 uv run best-practices-rag install
@@ -26,7 +26,7 @@ uv run best-practices-rag check
 
 Once installed, use the `/bp` command in Claude Code:
 
-```
+```text
 /bp fastapi sqlalchemy async
 /bp react typescript state management
 /bp docker kubernetes deployment patterns

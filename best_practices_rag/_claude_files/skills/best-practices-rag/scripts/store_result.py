@@ -6,9 +6,8 @@ import logging
 import sys
 from pathlib import Path
 
-from llama_index.graph_stores.neo4j import Neo4jPropertyGraphStore
-
 from best_practices_rag.config import get_settings
+from best_practices_rag.graph_store import GraphStore
 from best_practices_rag.logging_setup import configure_skill_logging
 from best_practices_rag.parser import build_synthesized_bundle
 from best_practices_rag.storage import store_results
@@ -90,10 +89,10 @@ def main() -> None:
     node_name = bp_nodes[0].name if bp_nodes else ""
 
     settings = get_settings()
-    graph_store = Neo4jPropertyGraphStore(
+    graph_store = GraphStore(
+        uri=settings.neo4j_uri,
         username=settings.neo4j_username,
         password=settings.neo4j_password.get_secret_value(),
-        url=settings.neo4j_uri,
     )
 
     nodes_count = store_results(bundle, graph_store)

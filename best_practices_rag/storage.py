@@ -1,7 +1,7 @@
 import logging
 
-from llama_index.core.graph_stores.types import EntityNode, Relation
-from llama_index.graph_stores.neo4j import Neo4jPropertyGraphStore
+from best_practices_rag.graph_models import EntityNode, Relation
+from best_practices_rag.graph_store import GraphStore
 
 from best_practices_rag.parser import GraphBundle
 
@@ -9,7 +9,7 @@ from best_practices_rag.parser import GraphBundle
 logger = logging.getLogger(__name__)
 
 
-def store_results(bundle: GraphBundle, graph_store: Neo4jPropertyGraphStore) -> int:
+def store_results(bundle: GraphBundle, graph_store: GraphStore) -> int:
     """Merge all nodes and relations from bundle into Neo4j.
 
     POC_NOTE: Nodes and relations are merged one at a time (N individual round-trips).
@@ -44,7 +44,7 @@ def store_results(bundle: GraphBundle, graph_store: Neo4jPropertyGraphStore) -> 
     return len(bundle.nodes)
 
 
-def _merge_node(node: EntityNode, graph_store: Neo4jPropertyGraphStore) -> None:
+def _merge_node(node: EntityNode, graph_store: GraphStore) -> None:
     props = {k: v for k, v in (node.properties or {}).items() if v is not None}
     graph_store.structured_query(
         "MERGE (n:__Entity__ {name: $name}) SET n.label = $label, n += $props",
@@ -55,7 +55,7 @@ def _merge_node(node: EntityNode, graph_store: Neo4jPropertyGraphStore) -> None:
 _ALLOWED_RELATION_LABELS = frozenset({"APPLIES_TO", "VERSION_OF"})
 
 
-def _merge_relation(rel: Relation, graph_store: Neo4jPropertyGraphStore) -> None:
+def _merge_relation(rel: Relation, graph_store: GraphStore) -> None:
     # Guard against Cypher injection via rel.label — only whitelisted labels are
     # permitted because relationship type names cannot be parameterized in Cypher.
     if rel.label not in _ALLOWED_RELATION_LABELS:

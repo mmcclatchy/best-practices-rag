@@ -6,8 +6,6 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "exa-py>=2.6.1",
-    "llama-index-core>=0.13.0",
-    "llama-index-graph-stores-neo4j>=0.5.1",
     "neo4j>=5.28.3",
     "pydantic>=2.12.5",
     "pydantic-settings>=2.13.1",

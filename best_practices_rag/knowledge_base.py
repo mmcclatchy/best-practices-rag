@@ -10,7 +10,7 @@ Schema traversal:
 import logging
 import re
 
-from llama_index.graph_stores.neo4j import Neo4jPropertyGraphStore
+from best_practices_rag.graph_store import GraphStore
 
 
 logger = logging.getLogger(__name__)
@@ -80,7 +80,7 @@ def _build_fulltext_query(keywords: list[str]) -> str:
 
 def query_knowledge_base(
     query: str,
-    graph_store: Neo4jPropertyGraphStore,
+    graph_store: GraphStore,
     tech_names: list[str] | None = None,
     topic_keywords: list[str] | None = None,
     lang_names: list[str] | None = None,

@@ -15,12 +15,16 @@ from importlib.resources import files
 from pathlib import Path
 
 
+from best_practices_rag.setup_schema import main as setup_main
+from best_practices_rag.config import get_settings
+from neo4j import GraphDatabase
+
+
 def _bundle_root() -> Path:
     return Path(str(files("best_practices_rag") / "_claude_files"))
 
 
 def _copy_tree(src: Path, dst: Path, *, force: bool) -> list[str]:
-    """Recursively copy files from src to dst. Returns list of copied paths."""
     copied: list[str] = []
     for item in src.rglob("*"):
         if item.is_dir():
@@ -141,13 +145,13 @@ def cmd_setup_db(args: argparse.Namespace) -> None:
     # Apply schema
     print("\nApplying database schema...")
     try:
-        from best_practices_rag.setup_schema import main as setup_main
-
         setup_main()
         print("Schema applied successfully.")
     except Exception as e:
         print(f"Schema setup failed: {e}")
-        print("You can retry later with: uv run python -m best_practices_rag.setup_schema")
+        print(
+            "You can retry later with: uv run python -m best_practices_rag.setup_schema"
+        )
         sys.exit(1)
 
 
@@ -183,10 +187,7 @@ def cmd_check(args: argparse.Namespace) -> None:
     # Check Neo4j connectivity
     print()
     try:
-        from best_practices_rag.config import get_settings
-
         settings = get_settings()
-        from neo4j import GraphDatabase
 
         driver = GraphDatabase.driver(
             settings.neo4j_uri,
@@ -201,8 +202,6 @@ def cmd_check(args: argparse.Namespace) -> None:
 
     # Check Exa API key
     try:
-        from best_practices_rag.config import get_settings
-
         settings = get_settings()
         key = settings.exa_api_key.get_secret_value()
         if key:
@@ -243,9 +242,7 @@ def main() -> None:
     setup_parser.set_defaults(func=cmd_setup_db)
 
     # check
-    check_parser = subparsers.add_parser(
-        "check", help="Validate installation"
-    )
+    check_parser = subparsers.add_parser("check", help="Validate installation")
     check_parser.set_defaults(func=cmd_check)
 
     args = parser.parse_args()

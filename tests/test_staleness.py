@@ -12,7 +12,8 @@ _PROJECT_ROOT = Path(__file__).parent.parent
 # Try .claude/ path first (dev repo), fall back to package data (release repo)
 _SCRIPT_CANDIDATES = [
     _PROJECT_ROOT / ".claude/skills/best-practices-rag/scripts/query_kb.py",
-    _PROJECT_ROOT / "best_practices_rag/_claude_files/skills/best-practices-rag/scripts/query_kb.py",
+    _PROJECT_ROOT
+    / "best_practices_rag/_claude_files/skills/best-practices-rag/scripts/query_kb.py",
 ]
 _SCRIPT_PATH = next((p for p in _SCRIPT_CANDIDATES if p.exists()), None)
 assert _SCRIPT_PATH is not None, "query_kb.py not found in any expected location"

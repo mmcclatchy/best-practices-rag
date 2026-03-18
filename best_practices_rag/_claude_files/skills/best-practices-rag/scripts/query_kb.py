@@ -9,10 +9,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from llama_index.graph_stores.neo4j import Neo4jPropertyGraphStore
-
 from best_practices_rag.config import get_settings
-from best_practices_rag.knowledge_base import query_knowledge_base, summarize_neo4j_results
+from best_practices_rag.graph_store import GraphStore
+from best_practices_rag.knowledge_base import (
+    query_knowledge_base,
+    summarize_neo4j_results,
+)
 from best_practices_rag.logging_setup import configure_skill_logging
 
 
@@ -141,10 +143,10 @@ def main() -> None:
     )
 
     settings = get_settings()
-    graph_store = Neo4jPropertyGraphStore(
+    graph_store = GraphStore(
+        uri=settings.neo4j_uri,
         username=settings.neo4j_username,
         password=settings.neo4j_password.get_secret_value(),
-        url=settings.neo4j_uri,
     )
 
     current_versions = _load_current_versions(

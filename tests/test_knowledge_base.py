@@ -3,7 +3,10 @@ from unittest.mock import MagicMock
 
 from pytest_mock import MockerFixture
 
-from best_practices_rag.knowledge_base import query_knowledge_base, summarize_neo4j_results
+from best_practices_rag.knowledge_base import (
+    query_knowledge_base,
+    summarize_neo4j_results,
+)
 
 
 def _make_graph_store(mocker: MockerFixture, rows: list[dict]) -> MagicMock:
@@ -133,7 +136,9 @@ def test_row_parsed_includes_tech_versions_at_synthesis(mocker: MockerFixture) -
     assert result[0]["synthesized_at"] == "2025-01-01T00:00:00+00:00"
 
 
-def test_row_parsed_tech_versions_defaults_to_empty_string(mocker: MockerFixture) -> None:
+def test_row_parsed_tech_versions_defaults_to_empty_string(
+    mocker: MockerFixture,
+) -> None:
     rows = [{"bp.name": "n1", "bp.title": "T", "bp.body": "B"}]
     gs = _make_graph_store(mocker, rows)
     result = query_knowledge_base("q", gs)

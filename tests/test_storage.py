@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock
 
 import pytest
-from llama_index.core.graph_stores.types import EntityNode, Relation
+from best_practices_rag.graph_models import EntityNode, Relation
 
 from best_practices_rag.parser import GraphBundle
 from best_practices_rag.storage import store_results, _merge_node, _merge_relation

@@ -50,4 +50,4 @@ Use `/bpr` for research mode (returns raw sources instead of synthesized output)
 
 ## Version
 
-v0.0.1
+v0.0.2

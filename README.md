@@ -6,7 +6,7 @@ A Claude Code skill pipeline for technology best practices via Neo4j knowledge g
 
 ```bash
 # Install the package from GitHub
-uv add git+https://github.com/markmcclatchy/best-practices-rag.git
+uv add git+https://github.com/mmcclatchy/best-practices-rag.git
 
 # Copy agents, commands, and scripts to your .claude/ directory
 uv run best-practices-rag install
@@ -36,7 +36,7 @@ Use `/bpr` for research mode (returns raw sources instead of synthesized output)
 
 ## Requirements
 
-- Python 3.13+
+- Python 3.10+ (3.13+ recommended)
 - Docker (for Neo4j)
 - Claude Code CLI
 - Exa API key (optional, for web search gap-fill)
@@ -50,4 +50,4 @@ Use `/bpr` for research mode (returns raw sources instead of synthesized output)
 
 ## Version
 
-v0.0.2
+v0.0.3

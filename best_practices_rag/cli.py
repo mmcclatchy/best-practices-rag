@@ -87,10 +87,29 @@ def _write_manifest(config_dir: Path, files: set[str]) -> None:
     )
 
 
+def _run_setup_schema() -> None:
+    neo4j_log = logging.getLogger("neo4j")
+    original_level = neo4j_log.level
+    neo4j_log.setLevel(logging.ERROR)
+    try:
+        setup_main()
+    finally:
+        neo4j_log.setLevel(original_level)
+
+
 def _remove_stale_claude_files(
     claude_dir: Path, config_dir: Path, new_files: set[str]
 ) -> None:
-    stale = [f for f in _read_manifest(config_dir) if f not in new_files]
+    stale: set[str] = {f for f in _read_manifest(config_dir) if f not in new_files}
+
+    # Namespace scan: catch bp-*.md agents installed before manifest tracking existed
+    agents_dir = claude_dir / "agents"
+    if agents_dir.exists():
+        for f in agents_dir.glob("bp-*.md"):
+            rel = f"agents/{f.name}"
+            if rel not in new_files:
+                stale.add(rel)
+
     for rel in stale:
         target = claude_dir / rel
         if target.exists():
@@ -163,7 +182,7 @@ def _setup_docker_neo4j(config_dir: Path) -> None:
 
     print("\nApplying database schema...")
     try:
-        setup_main()
+        _run_setup_schema()
         print("Schema applied successfully.")
     except Exception as e:
         print(f"Schema setup failed: {e}")
@@ -239,7 +258,7 @@ def setup(
     if neo4j_uri:
         print("\nApplying schema to existing Neo4j...")
         try:
-            setup_main()
+            _run_setup_schema()
             print("Schema applied successfully.")
         except Exception as e:
             print(f"Schema setup failed: {e}")
@@ -261,7 +280,7 @@ def setup_schema() -> None:
     """
     print("Applying database schema...")
     try:
-        setup_main()
+        _run_setup_schema()
         print("Schema applied successfully.")
     except Exception as e:
         print(f"Schema setup failed: {e}")

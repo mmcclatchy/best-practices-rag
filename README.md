@@ -120,7 +120,7 @@ This skips the local cache entirely, fetches new content from Exa, and updates t
 - [uv](https://docs.astral.sh/uv/) — manages Python automatically (no separate Python install needed)
 - [Docker](https://www.docker.com/) — required for the standalone Neo4j setup path
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code)
-- [Exa API key](https://exa.ai/pricing) — required for gap-fill web searches. Includes **1,000 free requests/month** (~333 gap-fills, no credit card required). Beyond the free tier: ~$0.024 per uncached gap-fill. Results are cached in Neo4j so repeated topics cost nothing.
+- [Exa API key](https://exa.ai/) — required for gap-fill web searches. Includes **1,000 free requests/month** (~333 gap-fills, no credit card required). Beyond the free tier: ~$0.024 per uncached gap-fill. Results are cached in Neo4j so repeated topics cost nothing.
 
 ---
 
@@ -183,4 +183,4 @@ Install `uv` and `best-practices-rag` from inside the WSL2 terminal using the Li
 
 ## Version
 
-v0.1.7
+v0.1.8

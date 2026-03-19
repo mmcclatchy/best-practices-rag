@@ -1,6 +1,6 @@
 [project]
 name = "best-practices-rag"
-version = "0.1.7"
+version = "0.1.8"
 description = "A Claude Code skill pipeline for technology best practices via Neo4j knowledge graph"
 readme = "README.md"
 requires-python = ">=3.10"

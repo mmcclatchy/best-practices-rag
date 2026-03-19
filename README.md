@@ -7,6 +7,14 @@ Works with any project language — Go, Rust, Python, TypeScript, etc.
 
 ### Standalone Neo4j via Docker
 
+**Install Docker** (required for this path):
+
+- **macOS**: [Docker Desktop for Mac](https://docs.docker.com/desktop/install/mac-install/)
+  or via Homebrew: `brew install --cask docker`
+- **Linux**: [Install Docker Engine](https://docs.docker.com/engine/install/) for your distro,
+  then install the [Compose plugin](https://docs.docker.com/compose/install/linux/)
+- **Windows**: [Docker Desktop for Windows](https://docs.docker.com/desktop/install/windows-install/)
+
 ```bash
 # Install globally — uv manages Python automatically, no separate Python install needed
 uv tool install git+https://github.com/mmcclatchy/best-practices-rag.git
@@ -49,7 +57,8 @@ Use `/bpr` for research mode — deeper architectural analysis and design tradeo
 
 ## Requirements
 
-- Python 3.10+ (for the CLI — not required in your project)
+- [uv](https://docs.astral.sh/uv/) — manages Python automatically (no separate Python install needed)
+- [Docker](https://www.docker.com/) — required for the standalone Neo4j setup path
 - Claude Code CLI
 - Exa API key (optional, enables web search gap-fill)
 

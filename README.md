@@ -3,6 +3,8 @@
 A Claude Code skill pipeline for technology best practices via Neo4j knowledge graph.
 Works with any project language — Go, Rust, Python, TypeScript, etc.
 
+---
+
 ## What is best-practices-rag?
 
 Getting up-to-date API references is a solved problem — tools like [Context7](https://context7.com) pull current library docs on demand. What remains harder is getting Claude to write code the *right way*: following the patterns a library's authors intended, avoiding common pitfalls, structuring code the way experienced practitioners in that ecosystem actually do it.
@@ -32,9 +34,13 @@ Exa includes **1,000 free requests per month** (no credit card required) — eno
 - **Works offline for cached topics**
   - Once a best practice is stored, Neo4j serves it without any network call
 
+---
+
 ## Quick Start
 
 Choose the path that matches your Neo4j setup.
+
+---
 
 ### Option 1: Standalone Neo4j via Docker
 
@@ -59,12 +65,16 @@ To set a specific Neo4j password instead of an auto-generated one:
 best-practices-rag setup --password mysecretpassword
 ```
 
+---
+
 ### Option 2: Existing Neo4j (already running or remote)
 
 ```bash
 uv tool install git+https://github.com/mmcclatchy/best-practices-rag.git
 best-practices-rag setup --neo4j-uri bolt://your-server:7687
 ```
+
+---
 
 ### Adding your Exa API key
 
@@ -73,6 +83,8 @@ After setup, edit `~/.config/best-practices-rag/.env` and add:
 ```bash
 EXA_API_KEY=your-exa-api-key-here
 ```
+
+---
 
 ## Usage
 
@@ -85,6 +97,8 @@ Once installed, use `/bp` in Claude Code for synthesized best practices:
 ```
 
 Use `/bpr` for research mode — deeper architectural analysis and design tradeoffs.
+
+---
 
 ### Force-refreshing a cached document
 
@@ -99,6 +113,8 @@ This skips the local cache entirely, fetches new content from Exa, and updates t
 
 > **Note:** `--force-refresh` triggers an Exa web search (~$0.024, or free within the 1,000 requests/month free tier).
 
+---
+
 ## Requirements
 
 - [uv](https://docs.astral.sh/uv/) — manages Python automatically (no separate Python install needed)
@@ -106,12 +122,16 @@ This skips the local cache entirely, fetches new content from Exa, and updates t
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code)
 - [Exa API key](https://exa.ai/pricing) — required for gap-fill web searches. Includes **1,000 free requests/month** (~333 gap-fills, no credit card required). Beyond the free tier: ~$0.024 per uncached gap-fill. Results are cached in Neo4j so repeated topics cost nothing.
 
+---
+
 ## How It Works
 
 1. `/bp` or `/bpr` queries the Neo4j knowledge graph for stored best practices
 2. Fresh, matching results are returned immediately — no network call, no cost
 3. If results are missing or stale, the tool searches the web via Exa and synthesizes a structured best-practices document
 4. The synthesized document is stored in Neo4j — future queries on the same topic are instant and free
+
+---
 
 ## All Commands
 
@@ -126,6 +146,8 @@ best-practices-rag uninstall      # remove installed ~/.claude/ files
 best-practices-rag version        # show installed version
 best-practices-rag update         # upgrade to the latest release
 ```
+
+---
 
 ## Windows
 
@@ -156,6 +178,8 @@ best-practices-rag setup
 ### WSL2
 
 Install `uv` and `best-practices-rag` from inside the WSL2 terminal using the Linux instructions above. Docker Desktop automatically exposes the Docker socket to WSL2.
+
+---
 
 ## Version
 

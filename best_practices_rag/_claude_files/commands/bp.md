@@ -15,7 +15,7 @@ Output directory: `.best-practices/`
 
 ## Workflow
 
-Execute each step in order. Step 5 is the **gap path** and runs only when the knowledge base does not adequately cover the query.
+Execute each step in order. Steps 1–4 run in the main session and produce scalar parameters. Step 5 delegates all large-data work to bp-pipeline.
 
 ### Step 1 — Extract technologies and topics
 
@@ -23,7 +23,7 @@ Parse `$ARGUMENTS`. Identify:
 - Technology names (e.g., `fastapi`, `sqlalchemy`, `neo4j`)
 - Topic keywords (e.g., `async`, `session management`, `connection pooling`)
 - Language names if mentioned (e.g., `python`)
-- `--force-refresh` flag — if present, skip Steps 3-4 entirely and proceed directly to the gap path (Step 5). Remove the flag from the query before using `$ARGUMENTS` elsewhere.
+- `--force-refresh` flag — if present, skip Steps 3-4 entirely and proceed directly to Step 5. Remove the flag from the query before using `$ARGUMENTS` elsewhere.
 
 ### Step 2 — Look up current versions
 
@@ -59,7 +59,7 @@ From the stdout, extract and retain ONLY:
 - `count` — number of results
 - `is_stale` flag for each result
 - `staleness_reason` for stale results (one of: `"version_mismatch"`, `"max_age"`, `"no_version_info"`)
-- `stale_technologies` and `version_deltas` for stale results — forwarded to bp-gap-handler
+- `stale_technologies` and `version_deltas` for stale results — forwarded to bp-pipeline
 - `body` of any result where `is_stale: true` — passed as `STALE_CONTEXT_BODY` in Step 5
 
 Do NOT retain the full raw JSON or body fields from non-stale results.
@@ -71,25 +71,25 @@ Compute:
 - `UNCOVERED_TECHS` = tech names from Step 1 that are NOT in `COVERED_TECHS`
 - `EXTRA_TECHS` = tech names in `COVERED_TECHS` that are NOT in the user-queried tech names from Step 1
 
-**Full gap** (count == 0 OR all results stale): proceed to Step 5.
-Pass stale result bodies as `STALE_CONTEXT_BODY` if any exist.
+**Full gap** (count == 0 OR all results stale): proceed to Step 5 (gap path).
+Pass stale result bodies as `STALE_CONTEXT_BODY` if any exist. Omit `UNCOVERED_TECH` and `COVERED_TECHS` from the Task call.
 
 **Partial gap** (count > 0, at least one fresh result, but `UNCOVERED_TECHS` is not empty):
-Proceed to Step 5. Pass `UNCOVERED_TECHS` as `UNCOVERED_TECH` in the gap handler call.
-The gap handler should focus research on the uncovered technologies only.
-After it runs, the synthesizer in Step 5.5 will pull both the existing and new KB content together.
+Proceed to Step 5. Pass `UNCOVERED_TECHS` as `UNCOVERED_TECH` and `COVERED_TECHS` in the Task call.
+bp-pipeline will focus gap research on the uncovered technologies only, then synthesize across all KB content.
 
 **Full coverage** (count > 0, at least one fresh result, `UNCOVERED_TECHS` is empty):
-Skip to Step 5.5.
+Proceed to Step 5 (cache-hit path). Omit `UNCOVERED_TECH`. Pass `COVERED_TECHS` and `ALL_QUERIED_TECHS`.
+bp-pipeline will skip Steps 0–6 and go directly to synthesis.
 
-### Step 5 — Launch bp-gap-handler [gap path]
+### Step 5 — Launch bp-pipeline
 
 Build the versioned primary query string and append `"official documentation"`: e.g., `"FastAPI 0.116 async session management SQLAlchemy 2.0 official documentation"`.
 
-Delegate to the `bp-gap-handler` agent using Task:
+Delegate to the `bp-pipeline` agent using Task:
 
 ```text
-Task(bp-gap-handler):
+Task(bp-pipeline):
 MODE: codegen
 TECH: <comma-separated tech names from Step 1>
 QUERY: $ARGUMENTS
@@ -97,39 +97,36 @@ TECH_VERSIONS_JSON: <JSON string from Step 2, e.g. {"fastapi":"0.116","sqlalchem
 CUTOFF_DATE: <YYYY-01-01 derived in Step 2>
 PRIMARY_QUERY: <versioned query string built above>
 OUTPUT_FILE: <OUTPUT_FILE from Step 2>
+TOPICS: <comma-separated topic keywords from Step 1>
 LANGUAGES: <comma-separated language names if identified in Step 1, omit if none>
 STALE_CONTEXT_BODY: <body text of stale KB results from Step 3, omit if none>
 STALE_TECHNOLOGIES: <comma-separated list from Step 3 staleness check, omit if none>
 VERSION_DELTAS: <JSON string from Step 3, e.g. {"sqlalchemy":{"stored":"2.0","current":"2.1"}}, omit if none>
-UNCOVERED_TECH: <comma-separated tech names from UNCOVERED_TECHS, omit if full gap>
+UNCOVERED_TECH: <comma-separated tech names from UNCOVERED_TECHS, omit if full coverage or full gap>
+COVERED_TECHS: <comma-separated tech names from COVERED_TECHS, omit if full gap>
+ALL_QUERIED_TECHS: <comma-separated tech names from Step 1>
 ```
 
-Wait for `bp-gap-handler` to return `"Synthesis complete. Output: <OUTPUT_FILE>"`.
-
-### Step 5.5 — Response synthesis (always runs)
-
-After Step 4 (cache hit) or after Step 5 (gap fill), invoke `bp-synthesizer`:
+Wait for bp-pipeline to return the completion signal:
 
 ```text
-Task(bp-synthesizer):
-MODE: codegen
-TECH: <comma-separated tech names from Step 1>
-TOPICS: <comma-separated topic keywords from Step 1>
-QUERY: $ARGUMENTS
-OUTPUT_FILE: <OUTPUT_FILE from Step 2>
-LANGUAGES: <comma-separated language names if identified in Step 1, omit if none>
+BP_PIPELINE_COMPLETE. Output: <OUTPUT_FILE>. Extra: <EXTRA_TECHS>. KB_Stored: <true|false>
 ```
 
-Wait for `bp-synthesizer` to return `"Synthesis complete. Output: <OUTPUT_FILE>"`.
+If bp-pipeline output does NOT contain `BP_PIPELINE_COMPLETE`, surface a clear error to the user: "bp-pipeline did not return a completion signal. Check bp-pipeline output for errors." Do not silently continue.
+
+Parse the signal:
+- `OUTPUT_FILE` from the `Output:` field (use this path for Step 6 — do not reuse the path computed in Step 2)
+- `EXTRA_TECHS_FROM_PIPELINE` from the `Extra:` field (comma-separated string, may be empty)
 
 ### Step 6 — Output to user
 
-Read `OUTPUT_FILE` (computed in Step 2) and present it as formatted markdown.
+Read `OUTPUT_FILE` (from the bp-pipeline completion signal) and present it as formatted markdown.
 
-If `EXTRA_TECHS` (computed in Step 4) is non-empty, prepend this blockquote before the document content:
+If `EXTRA_TECHS_FROM_PIPELINE` is non-empty, prepend this blockquote before the document content:
 
-> **Note:** These results cover [EXTRA_TECHS joined by " + "] in addition to what you queried. This
-> document assumes [EXTRA_TECHS] as the implementation layer. Re-run with explicit technology names
+> **Note:** These results cover [EXTRA_TECHS_FROM_PIPELINE joined by " + "] in addition to what you queried. This
+> document assumes [EXTRA_TECHS_FROM_PIPELINE] as the implementation layer. Re-run with explicit technology names
 > (e.g., `/bp fastapi redis async session`) for different patterns.
 
 ## References
@@ -137,3 +134,4 @@ If `EXTRA_TECHS` (computed in Step 4) is non-empty, prepend this blockquote befo
 - Synthesis format (codegen): `./.claude/skills/best-practices-rag/references/synthesis-format-codegen.md`
 - Synthesis format (research): `./.claude/skills/best-practices-rag/references/synthesis-format-research.md`
 - Technology versions: `./.claude/skills/best-practices-rag/references/tech-versions.md`
+- bp-pipeline interface: `./.claude/skills/best-practices-rag/references/bp-pipeline-interface.md`

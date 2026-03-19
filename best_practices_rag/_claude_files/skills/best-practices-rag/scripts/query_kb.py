@@ -174,19 +174,31 @@ def main() -> None:
     summary = summarize_neo4j_results(results)
 
     if args.include_bodies:
-        slim_results = results
+        bodies_path = Path("/tmp/bp_kb_bodies.txt")
+        lines: list[str] = []
+        for r in results:
+            body = r.get("body", "")
+            if body:
+                status = "stale" if r.get("is_stale") else "fresh"
+                lines.append(f"=== ENTRY: {r['name']} | STATUS: {status} ===")
+                lines.append(body)
+                lines.append("")
+        bodies_path.write_text("\n".join(lines), encoding="utf-8")
+        slim_results = [{k: v for k, v in r.items() if k != "body"} for r in results]
+        output = {
+            "count": len(results),
+            "results": slim_results,
+            "bodies_file": str(bodies_path),
+            "summary": summary,
+        }
     else:
         slim_results = [
             {k: v for k, v in r.items() if k != "body" or r.get("is_stale")}
             for r in results
         ]
+        output = {"count": len(results), "results": slim_results, "summary": summary}
 
     logger.debug("query_kb complete — %d results returned", len(results))
-    output = {
-        "count": len(results),
-        "results": slim_results,
-        "summary": summary,
-    }
     print(json.dumps(output))
 
 

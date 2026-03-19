@@ -1,10 +1,10 @@
 services:
   neo4j:
     image: neo4j:5.26.18
-    container_name: neo4j-rag-poc
+    container_name: best-practices-rag-neo4j-dev
     ports:
-      - "7474:7474"
-      - "7687:7687"
+      - "7475:7474"
+      - "7688:7687"
     volumes:
       - neo4j_data:/data
       - neo4j_logs:/logs
@@ -32,7 +32,3 @@ volumes:
 secrets:
   neo4j_auth:
     file: ./secrets/neo4j_auth_dev
-  exa_api_key:
-    file: ./secrets/exa_api_key
-  inference_api_key:
-    file: ./secrets/inference_api_key

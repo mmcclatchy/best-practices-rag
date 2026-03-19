@@ -8,7 +8,7 @@ Works with any project language — Go, Rust, Python, TypeScript, etc.
 ### Standalone Neo4j via Docker
 
 ```bash
-# Install globally (works with any project language)
+# Install globally — uv manages Python automatically, no separate Python install needed
 uv tool install git+https://github.com/mmcclatchy/best-practices-rag.git
 # or: pipx install git+https://github.com/mmcclatchy/best-practices-rag.git
 
@@ -76,4 +76,4 @@ best-practices-rag update         # upgrade to the latest release
 
 ## Version
 
-v0.1.4
+v0.1.5

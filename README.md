@@ -14,6 +14,7 @@ Works with any project language — Go, Rust, Python, TypeScript, etc.
 - **Linux**: [Install Docker Engine](https://docs.docker.com/engine/install/) for your distro,
   then install the [Compose plugin](https://docs.docker.com/compose/install/linux/)
 - **Windows**: [Docker Desktop for Windows](https://docs.docker.com/desktop/install/windows-install/)
+  — see [Windows setup notes](#windows) before continuing
 
 ```bash
 # Install globally — uv manages Python automatically, no separate Python install needed
@@ -82,6 +83,41 @@ best-practices-rag uninstall      # remove installed ~/.claude/ files
 best-practices-rag version        # show installed version
 best-practices-rag update         # upgrade to the latest release
 ```
+
+## Windows
+
+> **Note:** Windows support in Claude Code is evolving. If anything below seems out of date,
+> refer to the [official Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code/setup).
+
+Claude Code on Windows uses Git Bash internally, regardless of whether you launch it from
+PowerShell, CMD, or Git Bash directly. [Git for Windows](https://git-scm.com/downloads/win)
+must be installed first. WSL2 is optional — it is only required for Claude Code's `/sandbox`
+feature.
+
+**Install `uv` via the Windows installer** (run in PowerShell or CMD, not Git Bash):
+
+```powershell
+winget install astral-sh.uv
+# or
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+Using the Linux curl script inside Git Bash installs a Linux build of `uv` that won't integrate
+with the Windows PATH, so Claude Code won't be able to find `best-practices-rag`.
+
+Once `uv` is installed, continue from Git Bash, PowerShell, or CMD:
+
+```bash
+uv tool install git+https://github.com/mmcclatchy/best-practices-rag.git
+best-practices-rag setup
+```
+
+`~` in Git Bash resolves to `C:\Users\<username>` — the same home directory Python uses on
+Windows — so `~/.claude/` and `~/.config/best-practices-rag/` align correctly between the CLI
+and Claude Code.
+
+**WSL2 users:** Install `uv` and `best-practices-rag` from inside the WSL2 terminal using the
+Linux instructions. Docker Desktop automatically exposes the Docker socket to WSL2.
 
 ## Version
 

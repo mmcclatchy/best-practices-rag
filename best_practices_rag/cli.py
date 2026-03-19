@@ -57,6 +57,47 @@ def _copy_tree(src: Path, dst: Path, *, force: bool) -> list[str]:
     return copied
 
 
+def _bundle_claude_files(bundle: Path) -> set[str]:
+    result: set[str] = set()
+    for prefix, src in [
+        ("commands", bundle / "commands"),
+        ("agents", bundle / "agents"),
+        ("skills/best-practices-rag", bundle / "skills" / "best-practices-rag"),
+    ]:
+        if src.exists():
+            for item in src.rglob("*"):
+                if item.is_file():
+                    result.add(f"{prefix}/{item.relative_to(src)}")
+    return result
+
+
+def _read_manifest(config_dir: Path) -> list[str]:
+    path = config_dir / "manifest.json"
+    if not path.exists():
+        return []
+    try:
+        return json.loads(path.read_text()).get("files", [])
+    except Exception:
+        return []
+
+
+def _write_manifest(config_dir: Path, files: set[str]) -> None:
+    (config_dir / "manifest.json").write_text(
+        json.dumps({"version": __version__, "files": sorted(files)}, indent=2)
+    )
+
+
+def _remove_stale_claude_files(
+    claude_dir: Path, config_dir: Path, new_files: set[str]
+) -> None:
+    stale = [f for f in _read_manifest(config_dir) if f not in new_files]
+    for rel in stale:
+        target = claude_dir / rel
+        if target.exists():
+            target.unlink()
+            print(f"  removed (stale): {target}")
+
+
 def _setup_docker_neo4j(config_dir: Path) -> None:
     for cmd in ["docker", "docker compose"]:
         binary = cmd.split()[0]
@@ -164,6 +205,8 @@ def setup(
     print("Installing best-practices-rag globally...\n")
 
     bundle = _bundle_root()
+    new_files = _bundle_claude_files(bundle)
+    _remove_stale_claude_files(claude_dir, config_dir, new_files)
     _copy_tree(bundle / "commands", claude_dir / "commands", force=force)
     _copy_tree(bundle / "agents", claude_dir / "agents", force=force)
     _copy_tree(
@@ -171,6 +214,7 @@ def setup(
         claude_dir / "skills" / "best-practices-rag",
         force=force,
     )
+    _write_manifest(config_dir, new_files)
 
     env_example = config_dir / ".env.example"
     if not env_example.exists() or force:
@@ -623,10 +667,24 @@ def update() -> None:
         if shutil.which(manager):
             print(f"Upgrading via {manager}...")
             result = subprocess.run(cmd)
-            if result.returncode == 0:
-                return
-            print(f"{manager} upgrade failed.", file=sys.stderr)
-            sys.exit(1)
+            if result.returncode != 0:
+                print(f"{manager} upgrade failed.", file=sys.stderr)
+                sys.exit(1)
+            print("\nUpdating ~/.claude/ skill files...")
+            config_dir = Path.home() / ".config" / "best-practices-rag"
+            claude_dir = Path.home() / ".claude"
+            bundle = _bundle_root()
+            new_files = _bundle_claude_files(bundle)
+            _remove_stale_claude_files(claude_dir, config_dir, new_files)
+            _copy_tree(bundle / "commands", claude_dir / "commands", force=True)
+            _copy_tree(bundle / "agents", claude_dir / "agents", force=True)
+            _copy_tree(
+                bundle / "skills" / "best-practices-rag",
+                claude_dir / "skills" / "best-practices-rag",
+                force=True,
+            )
+            _write_manifest(config_dir, new_files)
+            return
 
     print("Error: neither uv nor pipx found.", file=sys.stderr)
     print("Run one of:", file=sys.stderr)

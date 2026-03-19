@@ -240,8 +240,7 @@ def check() -> None:
     expected_files = [
         "commands/bp.md",
         "commands/bpr.md",
-        "agents/bp-synthesizer.md",
-        "agents/bp-gap-handler.md",
+        "agents/bp-pipeline.md",
         "skills/best-practices-rag/references/synthesis-format.md",
         "skills/best-practices-rag/references/synthesis-format-codegen.md",
         "skills/best-practices-rag/references/synthesis-format-research.md",
@@ -564,8 +563,7 @@ def uninstall(
     files_to_remove = [
         claude_dir / "commands" / "bp.md",
         claude_dir / "commands" / "bpr.md",
-        claude_dir / "agents" / "bp-synthesizer.md",
-        claude_dir / "agents" / "bp-gap-handler.md",
+        claude_dir / "agents" / "bp-pipeline.md",
     ]
 
     refs_dir = claude_dir / "skills" / "best-practices-rag" / "references"

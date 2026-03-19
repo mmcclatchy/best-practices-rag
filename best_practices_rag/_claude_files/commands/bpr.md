@@ -40,6 +40,23 @@ Compute the output file path:
 - `OUTPUT_SLUG` = sorted tech names joined by `-` + `-` + topic keywords joined by `-`, truncated to 60 characters, then append `-research` (e.g., `fastapi-sqlalchemy-async-session-management-research`)
 - `OUTPUT_FILE` = `.best-practices/<OUTPUT_SLUG>.md`
 
+### Step 2.5 — Check file cache
+
+If `--force-refresh` was set in Step 1, skip this step.
+
+```bash
+uv run ./.claude/skills/best-practices-rag/scripts/check_file_cache.py \
+  --file "<OUTPUT_FILE from Step 2>" \
+  --model "<your model ID, e.g. claude-sonnet-4-6>"
+```
+
+Parse the JSON. If `hit` is `true`:
+- Skip Steps 3–5 entirely
+- Proceed directly to Step 6 — Output to user
+- Prepend: `> **Cached:** Serving previously synthesized result.`
+
+If `hit` is `false`, continue to Step 3.
+
 ### Step 3 — Query the knowledge base
 
 If `--force-refresh` was set in Step 1, skip this step and Step 4 entirely. Set `staleness_reason` to `"force_refresh"` and proceed to Step 5.

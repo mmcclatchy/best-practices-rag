@@ -140,8 +140,7 @@ def test_cmd_check_validates_global_claude_dir(
     for f in [
         "commands/bp.md",
         "commands/bpr.md",
-        "agents/bp-synthesizer.md",
-        "agents/bp-gap-handler.md",
+        "agents/bp-pipeline.md",
         "skills/best-practices-rag/references/synthesis-format.md",
         "skills/best-practices-rag/references/synthesis-format-codegen.md",
         "skills/best-practices-rag/references/synthesis-format-research.md",

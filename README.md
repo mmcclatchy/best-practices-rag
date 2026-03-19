@@ -17,10 +17,16 @@ Exa includes **1,000 free requests per month** (no credit card required) — eno
 
 ### Benefits
 
-- **Idiomatic code** — Claude emulates patterns from authoritative sources rather than inferring from training data, producing code that follows how technologies are meant to be used
-- **Fewer bugs** — explicit anti-patterns and common pitfalls are part of the stored knowledge, giving Claude specific things to avoid during generation
-- **Generous free tier** — Exa provides 1,000 free requests/month (~333 gap-fills) with no credit card required; the graph grows over time so the same topics are never searched twice
-- **Two modes** — `/bp` for concise, implementation-focused patterns; `/bpr` for deep architectural analysis and design tradeoff research
+- **Idiomatic code**
+  - Claude emulates patterns from authoritative sources rather than inferring from training data, producing code that follows how technologies are meant to be used
+- **Fewer bugs**
+  - Explicit anti-patterns and common pitfalls are part of the stored knowledge, giving Claude specific things to avoid during generation
+- **Generous free tier**
+  - Exa provides 1,000 free requests/month (~333 gap-fills) with no credit card required
+  - The graph grows over time so the same topics are never searched twice
+- **Two modes**
+  - `/bp` for concise, implementation-focused patterns
+  - `/bpr` for deep architectural analysis and design tradeoff research
 - **Language agnostic** — one global install serves every project on your machine regardless of language or framework
 - **Works offline for cached topics** — once a best practice is stored, Neo4j serves it without any network call
 

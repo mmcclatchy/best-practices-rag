@@ -7,6 +7,7 @@ requires-python = ">=3.10"
 dependencies = [
     "exa-py>=2.6.1",
     "neo4j>=5.28.3",
+    "neo4j-python-migrations>=0.1.4",
     "pydantic>=2.12.5",
     "pydantic-settings>=2.13.1",
 ]

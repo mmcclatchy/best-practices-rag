@@ -1,14 +1,15 @@
 """CLI entry points for best-practices-rag.
 
 Subcommands:
-    install      — copy agents, commands, and references to .claude/
-    setup-db     — start Neo4j via Docker and apply schema
-    check        — validate installation
-    query-kb     — query Neo4j knowledge base for best practices
-    search-exa   — search Exa for best practices
-    store-result — store synthesized best practice into Neo4j
-    init         — one-command setup (create .env, install, setup-db, check)
-    uninstall    — remove installed .claude/ files
+    install       — copy agents, commands, and references to .claude/
+    setup-db      — start Neo4j via Docker and apply schema
+    setup-schema  — apply schema to an existing Neo4j instance (no Docker required)
+    check         — validate installation
+    query-kb      — query Neo4j knowledge base for best practices
+    search-exa    — search Exa for best practices
+    store-result  — store synthesized best practice into Neo4j
+    init          — one-command setup (create .env, install, setup-db, check)
+    uninstall     — remove installed .claude/ files
 """
 
 import argparse
@@ -93,10 +94,20 @@ def cmd_install(args: argparse.Namespace) -> None:
 
     print("\nInstall complete.")
     print("\nNext steps:")
-    print("  1. best-practices-rag setup-db")
-    print("  2. Copy .env.example to .env and set NEO4J_PASSWORD")
-    print("  3. Optionally set EXA_API_KEY in .env for web search")
-    print("  4. Use /bp <technologies> to query best practices")
+    print()
+    print("Standalone Neo4j (Docker):")
+    print("  1. best-practices-rag init         (one command: .env + Docker + schema + check)")
+    print("  OR step by step:")
+    print("  1. cp .env.example .env            (then set NEO4J_PASSWORD)")
+    print("  2. best-practices-rag setup-db")
+    print("  3. best-practices-rag check")
+    print()
+    print("Existing Neo4j (already running):")
+    print("  1. cp .env.example .env            (then set NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD)")
+    print("  2. best-practices-rag setup-schema")
+    print("  3. best-practices-rag check")
+    print()
+    print("Then: Use /bp <technologies> in Claude Code")
 
 
 def cmd_setup_db(args: argparse.Namespace) -> None:
@@ -176,6 +187,16 @@ def cmd_setup_db(args: argparse.Namespace) -> None:
     except Exception as e:
         print(f"Schema setup failed: {e}")
         print("You can retry later with: best-practices-rag setup-db")
+        sys.exit(1)
+
+
+def cmd_setup_schema(args: argparse.Namespace) -> None:
+    print("Applying database schema...")
+    try:
+        setup_main()
+        print("Schema applied successfully.")
+    except Exception as e:
+        print(f"Schema setup failed: {e}")
         sys.exit(1)
 
 
@@ -522,6 +543,13 @@ def main() -> None:
         "setup-db", help="Start Neo4j via Docker and apply schema"
     )
     setup_parser.set_defaults(func=cmd_setup_db)
+
+    # setup-schema
+    schema_parser = subparsers.add_parser(
+        "setup-schema",
+        help="Apply schema to an existing Neo4j instance (no Docker required)",
+    )
+    schema_parser.set_defaults(func=cmd_setup_schema)
 
     # check
     check_parser = subparsers.add_parser("check", help="Validate installation")

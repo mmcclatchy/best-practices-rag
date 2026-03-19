@@ -27,8 +27,10 @@ Exa includes **1,000 free requests per month** (no credit card required) — eno
 - **Two modes**
   - `/bp` for concise, implementation-focused patterns
   - `/bpr` for deep architectural analysis and design tradeoff research
-- **Language agnostic** — one global install serves every project on your machine regardless of language or framework
-- **Works offline for cached topics** — once a best practice is stored, Neo4j serves it without any network call
+- **Language agnostic**
+  - One global install serves every project on your machine regardless of language or framework
+- **Works offline for cached topics**
+  - Once a best practice is stored, Neo4j serves it without any network call
 
 ## Quick Start
 

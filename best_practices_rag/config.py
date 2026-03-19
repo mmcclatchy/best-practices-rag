@@ -1,5 +1,10 @@
+from pathlib import Path
+
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+_GLOBAL_ENV = Path.home() / ".config" / "best-practices-rag" / ".env"
 
 
 class Settings(BaseSettings):
@@ -17,7 +22,7 @@ class Settings(BaseSettings):
     exa_min_published_year_offset: int = 2
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=[str(_GLOBAL_ENV), ".env"],  # global default, CWD overrides
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",

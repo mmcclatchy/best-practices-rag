@@ -27,7 +27,7 @@ Parse `$ARGUMENTS`. Identify:
 
 ### Step 2 — Look up current versions
 
-Read `./.claude/skills/best-practices-rag/references/tech-versions.md`.
+Read `~/.claude/skills/best-practices-rag/references/tech-versions.md`.
 
 For each technology identified in Step 1:
 - Note the current version to append to Exa queries (e.g., `"FastAPI 0.116"`)
@@ -123,7 +123,7 @@ Read `OUTPUT_FILE` (from the bp-pipeline completion signal) and present it as fo
 
 ## References
 
-- Synthesis format (codegen): `./.claude/skills/best-practices-rag/references/synthesis-format-codegen.md`
-- Synthesis format (research): `./.claude/skills/best-practices-rag/references/synthesis-format-research.md`
-- Technology versions: `./.claude/skills/best-practices-rag/references/tech-versions.md`
-- bp-pipeline interface: `./.claude/skills/best-practices-rag/references/bp-pipeline-interface.md`
+- Synthesis format (codegen): `~/.claude/skills/best-practices-rag/references/synthesis-format-codegen.md`
+- Synthesis format (research): `~/.claude/skills/best-practices-rag/references/synthesis-format-research.md`
+- Technology versions: `~/.claude/skills/best-practices-rag/references/tech-versions.md`
+- bp-pipeline interface: `~/.claude/skills/best-practices-rag/references/bp-pipeline-interface.md`

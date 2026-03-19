@@ -5,34 +5,31 @@ Works with any project language — Go, Rust, Python, TypeScript, etc.
 
 ## Quick Start
 
-### New project (standalone Neo4j via Docker)
+### Standalone Neo4j via Docker
 
 ```bash
 # Install globally (works with any project language)
 uv tool install git+https://github.com/mmcclatchy/best-practices-rag.git
 # or: pipx install git+https://github.com/mmcclatchy/best-practices-rag.git
 
-# One-command setup: creates .env, installs .claude/ files, starts Neo4j, validates
-best-practices-rag init
+# One-command global setup: installs ~/.claude/ files, starts Neo4j, applies schema
+best-practices-rag setup
 ```
 
 To set a specific Neo4j password instead of a generated one:
 
 ```bash
-best-practices-rag init --password mysecretpassword
+best-practices-rag setup --password mysecretpassword
 ```
 
-### Existing Neo4j (already in your docker-compose or remote)
+### Existing Neo4j (already running or remote)
 
 ```bash
-pipx install git+https://github.com/mmcclatchy/best-practices-rag.git
-best-practices-rag install         # copies .claude/ files into this project
-cp .env.example .env               # then set NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD
-best-practices-rag setup-schema    # applies schema to your existing Neo4j
-best-practices-rag check
+uv tool install git+https://github.com/mmcclatchy/best-practices-rag.git
+best-practices-rag setup --neo4j-uri bolt://your-server:7687
 ```
 
-If you need to add an Exa API key after setup, edit `.env` and add:
+If you need to add an Exa API key after setup, edit `~/.config/best-practices-rag/.env` and add:
 
 ```bash
 EXA_API_KEY=your-exa-api-key-here
@@ -53,7 +50,6 @@ Use `/bpr` for research mode — deeper architectural analysis and design tradeo
 ## Requirements
 
 - Python 3.10+ (for the CLI — not required in your project)
-- Docker (for Neo4j — only required for standalone path)
 - Claude Code CLI
 - Exa API key (optional, enables web search gap-fill)
 
@@ -67,17 +63,17 @@ Use `/bpr` for research mode — deeper architectural analysis and design tradeo
 ## All Commands
 
 ```bash
-best-practices-rag init           # one-command setup (standalone Docker path)
-best-practices-rag install        # copy .claude/ files only
-best-practices-rag setup-db       # start Neo4j via Docker and apply schema
+best-practices-rag setup          # global one-command setup
 best-practices-rag setup-schema   # apply schema to existing Neo4j (no Docker required)
-best-practices-rag check          # validate installation
+best-practices-rag check          # validate global installation (~/.claude/)
 best-practices-rag query-kb       # query knowledge base (used by /bp)
 best-practices-rag search-exa     # search Exa (used by gap-fill agent)
 best-practices-rag store-result   # store synthesized result to Neo4j
-best-practices-rag uninstall      # remove installed .claude/ files
+best-practices-rag uninstall      # remove installed ~/.claude/ files
+best-practices-rag version        # show installed version
+best-practices-rag update         # upgrade to the latest release
 ```
 
 ## Version
 
-v0.1.3
+v0.1.4

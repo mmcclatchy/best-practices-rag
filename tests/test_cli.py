@@ -1,16 +1,23 @@
-import argparse
 import sys
+from pathlib import Path
 
 import pytest
 from pytest_mock import MockerFixture
 
+from best_practices_rag.cli import check
+from best_practices_rag.cli import main
+from best_practices_rag.cli import setup
+from best_practices_rag.cli import setup_schema
+from best_practices_rag.cli import update
+from best_practices_rag.cli import version
 
-def test_setup_schema_success(mocker: MockerFixture, capsys: pytest.CaptureFixture[str]) -> None:
+
+def test_setup_schema_success(
+    mocker: MockerFixture, capsys: pytest.CaptureFixture[str]
+) -> None:
     mock_setup = mocker.patch("best_practices_rag.cli.setup_main")
 
-    from best_practices_rag.cli import cmd_setup_schema
-
-    cmd_setup_schema(argparse.Namespace())
+    setup_schema()
 
     mock_setup.assert_called_once()
     out = capsys.readouterr().out
@@ -18,13 +25,16 @@ def test_setup_schema_success(mocker: MockerFixture, capsys: pytest.CaptureFixtu
     assert "Schema applied successfully" in out
 
 
-def test_setup_schema_failure_exits(mocker: MockerFixture, capsys: pytest.CaptureFixture[str]) -> None:
-    mocker.patch("best_practices_rag.cli.setup_main", side_effect=RuntimeError("connection refused"))
-
-    from best_practices_rag.cli import cmd_setup_schema
+def test_setup_schema_failure_exits(
+    mocker: MockerFixture, capsys: pytest.CaptureFixture[str]
+) -> None:
+    mocker.patch(
+        "best_practices_rag.cli.setup_main",
+        side_effect=RuntimeError("connection refused"),
+    )
 
     with pytest.raises(SystemExit) as exc_info:
-        cmd_setup_schema(argparse.Namespace())
+        setup_schema()
 
     assert exc_info.value.code == 1
     out = capsys.readouterr().out
@@ -33,21 +43,6 @@ def test_setup_schema_failure_exits(mocker: MockerFixture, capsys: pytest.Captur
 
 
 def test_setup_schema_registered_as_subcommand() -> None:
-    from best_practices_rag.cli import main
-    import argparse
-
-    # Parse --help equivalent by checking subcommands are registered
-    # We do this by verifying the parser accepts setup-schema
-    from best_practices_rag import cli
-    import importlib
-
-    # Build the parser by calling parse_args with --help would sys.exit,
-    # so instead we verify via direct subparser inspection
-    parser = argparse.ArgumentParser(prog="best-practices-rag")
-    subparsers = parser.add_subparsers(dest="command")
-
-    # Confirm setup-schema is wired in real main by running it with --help
-    # and catching the SystemExit(0)
     with pytest.raises(SystemExit) as exc_info:
         sys.argv = ["best-practices-rag", "setup-schema", "--help"]
         main()
@@ -55,23 +50,177 @@ def test_setup_schema_registered_as_subcommand() -> None:
     assert exc_info.value.code == 0
 
 
-def test_cmd_install_shows_both_paths(mocker: MockerFixture, capsys: pytest.CaptureFixture[str], tmp_path: pytest.TempPathFactory) -> None:
-    mocker.patch("best_practices_rag.cli._bundle_root", return_value=tmp_path)
+def test_setup_standalone_creates_global_files(
+    mocker: MockerFixture,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    mocker.patch("pathlib.Path.home", return_value=tmp_path)
+    mocker.patch(
+        "best_practices_rag.cli._bundle_root", return_value=tmp_path / "bundle"
+    )
     mocker.patch("best_practices_rag.cli._copy_tree", return_value=[])
+    mocker.patch("best_practices_rag.cli._setup_docker_neo4j")
 
-    # Stub out the infra file copies
-    infra = tmp_path / "infra"
-    infra.mkdir(parents=True)
-    (infra / ".env.example").write_text("")
+    bundle = tmp_path / "bundle"
+    (bundle / "infra").mkdir(parents=True)
+    (bundle / "infra" / ".env.example").write_text("# example\n")
 
-    mocker.patch("shutil.copy2")
+    setup(force=False, password=None, neo4j_uri=None, neo4j_username=None)
 
-    from best_practices_rag.cli import cmd_install
+    config_dir = tmp_path / ".config" / "best-practices-rag"
+    assert (config_dir / ".env").exists()
+    env_content = (config_dir / ".env").read_text()
+    assert "NEO4J_URI=" in env_content
+    assert "NEO4J_PASSWORD=" in env_content
 
-    cmd_install(argparse.Namespace(force=False))
+
+def test_setup_existing_neo4j_skips_docker(
+    mocker: MockerFixture,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    mocker.patch("pathlib.Path.home", return_value=tmp_path)
+    mocker.patch(
+        "best_practices_rag.cli._bundle_root", return_value=tmp_path / "bundle"
+    )
+    mocker.patch("best_practices_rag.cli._copy_tree", return_value=[])
+    mock_setup_main = mocker.patch("best_practices_rag.cli.setup_main")
+    mock_docker = mocker.patch("best_practices_rag.cli._setup_docker_neo4j")
+
+    bundle = tmp_path / "bundle"
+    (bundle / "infra").mkdir(parents=True)
+    (bundle / "infra" / ".env.example").write_text("# example\n")
+
+    setup(
+        force=False,
+        password=None,
+        neo4j_uri="bolt://myserver:7687",
+        neo4j_username="neo4j",
+    )
+
+    mock_setup_main.assert_called_once()
+    mock_docker.assert_not_called()
+
+
+def test_setup_force_overwrites(
+    mocker: MockerFixture,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    mocker.patch("pathlib.Path.home", return_value=tmp_path)
+    mocker.patch(
+        "best_practices_rag.cli._bundle_root", return_value=tmp_path / "bundle"
+    )
+    mocker.patch("best_practices_rag.cli._copy_tree", return_value=[])
+    mocker.patch("best_practices_rag.cli._setup_docker_neo4j")
+
+    bundle = tmp_path / "bundle"
+    (bundle / "infra").mkdir(parents=True)
+    (bundle / "infra" / ".env.example").write_text("# example\n")
+
+    config_dir = tmp_path / ".config" / "best-practices-rag"
+    config_dir.mkdir(parents=True)
+    existing_env = config_dir / ".env"
+    existing_env.write_text("NEO4J_PASSWORD=old\n")
+
+    setup(force=True, password="newpass", neo4j_uri=None, neo4j_username=None)
+
+    assert "newpass" in existing_env.read_text()
+
+
+def test_cmd_check_validates_global_claude_dir(
+    mocker: MockerFixture,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    mocker.patch("pathlib.Path.home", return_value=tmp_path)
+
+    claude_dir = tmp_path / ".claude"
+    for f in [
+        "commands/bp.md",
+        "commands/bpr.md",
+        "agents/bp-synthesizer.md",
+        "agents/bp-gap-handler.md",
+        "skills/best-practices-rag/references/synthesis-format.md",
+        "skills/best-practices-rag/references/synthesis-format-codegen.md",
+        "skills/best-practices-rag/references/synthesis-format-research.md",
+        "skills/best-practices-rag/references/tech-versions.md",
+    ]:
+        p = claude_dir / f
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("")
+
+    mock_settings = mocker.MagicMock()
+    mock_settings.neo4j_uri = "bolt://localhost:7687"
+    mock_settings.neo4j_username = "neo4j"
+    mock_settings.neo4j_password.get_secret_value.return_value = "test"
+    mock_settings.exa_api_key.get_secret_value.return_value = ""
+    mocker.patch("best_practices_rag.cli.get_settings", return_value=mock_settings)
+    mock_driver_instance = mocker.MagicMock()
+    mocker.patch(
+        "best_practices_rag.cli.GraphDatabase.driver", return_value=mock_driver_instance
+    )
+
+    check()
 
     out = capsys.readouterr().out
-    assert "Standalone Neo4j" in out
-    assert "Existing Neo4j" in out
-    assert "setup-schema" in out
-    assert "setup-db" in out
+    assert "~/.claude/" in out
+    file_check_section = out.split("Neo4j")[0]
+    assert "[FAIL]" not in file_check_section
+
+
+def test_version_prints_version(capsys: pytest.CaptureFixture[str]) -> None:
+    version()
+
+    out = capsys.readouterr().out
+    assert "best-practices-rag v" in out
+
+
+def test_update_uses_uv(
+    mocker: MockerFixture, capsys: pytest.CaptureFixture[str]
+) -> None:
+    mocker.patch(
+        "best_practices_rag.cli.shutil.which",
+        side_effect=lambda x: "/usr/bin/uv" if x == "uv" else None,
+    )
+    mock_run = mocker.patch(
+        "best_practices_rag.cli.subprocess.run",
+        return_value=mocker.MagicMock(returncode=0),
+    )
+
+    update()
+
+    assert mock_run.call_args[0][0] == ["uv", "tool", "upgrade", "best-practices-rag"]
+
+
+def test_update_falls_back_to_pipx(
+    mocker: MockerFixture, capsys: pytest.CaptureFixture[str]
+) -> None:
+    mocker.patch(
+        "best_practices_rag.cli.shutil.which",
+        side_effect=lambda x: None if x == "uv" else "/usr/bin/pipx",
+    )
+    mock_run = mocker.patch(
+        "best_practices_rag.cli.subprocess.run",
+        return_value=mocker.MagicMock(returncode=0),
+    )
+
+    update()
+
+    assert mock_run.call_args[0][0] == [
+        "pipx",
+        "upgrade",
+        "best-practices-rag",
+    ]
+
+
+def test_update_exits_if_no_manager(
+    mocker: MockerFixture, capsys: pytest.CaptureFixture[str]
+) -> None:
+    mocker.patch("best_practices_rag.cli.shutil.which", return_value=None)
+
+    with pytest.raises(SystemExit) as exc_info:
+        update()
+
+    assert exc_info.value.code == 1

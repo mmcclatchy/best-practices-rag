@@ -945,6 +945,15 @@ def update() -> None:
                 force=True,
             )
             _write_manifest(config_dir, new_files)
+
+            print("\nApplying database schema...")
+            try:
+                _run_setup_schema()
+                print("Schema applied successfully.")
+            except Exception as e:
+                print(f"Schema setup failed: {e}")
+                print("You can retry later with: best-practices-rag setup-schema")
+
             return
 
     print("Error: neither uv nor pipx found.", file=sys.stderr)

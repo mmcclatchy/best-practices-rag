@@ -33,8 +33,17 @@ class TestGenerateSlug:
 
     def test_truncation_at_word_boundary(self) -> None:
         result = _generate_slug(
-            ["alpha", "bravo", "charlie", "delta", "echo",
-             "foxtrot", "golf", "hotel", "india"],
+            [
+                "alpha",
+                "bravo",
+                "charlie",
+                "delta",
+                "echo",
+                "foxtrot",
+                "golf",
+                "hotel",
+                "india",
+            ],
             ["juliet", "kilo"],
             "codegen",
         )
@@ -222,10 +231,12 @@ def test_update_uses_uv(
         "best_practices_rag.cli.subprocess.run",
         return_value=mocker.MagicMock(returncode=0),
     )
+    mock_schema = mocker.patch("best_practices_rag.cli._run_setup_schema")
 
     update()
 
     assert mock_run.call_args[0][0] == ["uv", "tool", "upgrade", "best-practices-rag"]
+    mock_schema.assert_called_once()
 
 
 def test_update_falls_back_to_pipx(
@@ -239,6 +250,7 @@ def test_update_falls_back_to_pipx(
         "best_practices_rag.cli.subprocess.run",
         return_value=mocker.MagicMock(returncode=0),
     )
+    mock_schema = mocker.patch("best_practices_rag.cli._run_setup_schema")
 
     update()
 
@@ -247,6 +259,7 @@ def test_update_falls_back_to_pipx(
         "upgrade",
         "best-practices-rag",
     ]
+    mock_schema.assert_called_once()
 
 
 def test_update_exits_if_no_manager(

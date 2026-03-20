@@ -13,10 +13,6 @@ Use this command to conduct in-depth research on software engineering topics, fo
 <!-- Output directory for saved best-practices documents. Change this path to relocate output. -->
 Output directory: `.best-practices/`
 
-> **Path scope**: All `~/.claude/skills/` paths in this command are **project-local** and
-> resolve to `<project-root>/.claude/`, NOT to `~/.claude/`. Use paths exactly as written.
-> Never substitute `~/.claude/` for `~/.claude/`.
-
 ## Workflow
 
 Execute each step in order. Steps 1–4 run in the main session and produce scalar parameters. Step 5 delegates all large-data work to bp-pipeline.
@@ -31,14 +27,15 @@ Parse `$ARGUMENTS`. Identify:
 
 ### Step 2 — Look up current versions
 
-Read `~/.claude/skills/best-practices-rag/references/tech-versions.md` (project-local — NOT `~/.claude/`).
+```bash
+best-practices-rag lookup-versions --tech "<comma-separated tech names from Step 1>"
+```
 
-For each technology identified in Step 1:
-- Note the current version to append to Exa queries (e.g., `"FastAPI 0.116"`)
-- Note the Release Date to derive `--cutoff-date` (format: `YYYY-01-01`)
-- Record the full `{tech: version}` mapping as `TECH_VERSIONS_JSON` for use in Step 5
-- If a technology is NOT found in the table, omit it from `TECH_VERSIONS_JSON` entirely — do not use `"latest"`, `"unknown"`, or any placeholder string
-- If NO technologies are found in the table, set `TECH_VERSIONS_JSON` to `{}`; derive `--cutoff-date` as `(current year - 2)-01-01`
+Parse the JSON:
+- `tech_versions` → use directly as `TECH_VERSIONS_JSON` for Step 5
+- `cutoff_date` → use as `CUTOFF_DATE`
+- Technologies in `not_found` have no version entry — they are already absent from `tech_versions`
+- If `tech_versions` is empty (no technologies found), `cutoff_date` defaults to `(current year - 2)-01-01`
 
 Compute the output file path:
 - `OUTPUT_SLUG` = sorted tech names joined by `-` + `-` + topic keywords joined by `-`, truncated to 60 characters, then append `-research` (e.g., `fastapi-sqlalchemy-async-session-management-research`)

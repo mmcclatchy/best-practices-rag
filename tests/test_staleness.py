@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from best_practices_rag.staleness import check_staleness, load_current_versions
+from best_practices_rag.staleness import check_staleness, load_current_versions, load_tech_info
 
 
 def test_load_current_versions_parses_markdown_table(tmp_path: Path) -> None:
@@ -15,6 +15,21 @@ def test_load_current_versions_parses_markdown_table(tmp_path: Path) -> None:
     versions = load_current_versions(tmp_path)
     assert versions["fastapi"] == "0.116"
     assert versions["neo4j"] == "5.28"
+
+
+def test_load_tech_info_parses_three_columns(tmp_path: Path) -> None:
+    table = (
+        "# Tech Versions\n\n"
+        "| Technology | Version | Release Date | Key Changes |\n"
+        "| --- | --- | --- | --- |\n"
+        "| FastAPI | 0.116 | 2025-01-01 | Some changes |\n"
+        "| SQLAlchemy | 2.0 | 2023-01-26 | Other changes |\n"
+    )
+    (tmp_path / "tech-versions.md").write_text(table, encoding="utf-8")
+    info = load_tech_info(tmp_path)
+    assert info["fastapi"]["version"] == "0.116"
+    assert info["fastapi"]["release_date"] == "2025-01-01"
+    assert info["sqlalchemy"]["release_date"] == "2023-01-26"
 
 
 def test_check_staleness_empty_string_is_stale() -> None:

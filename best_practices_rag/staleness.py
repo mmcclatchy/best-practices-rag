@@ -18,6 +18,23 @@ def load_current_versions(references_dir: Path) -> dict[str, str]:
     }
 
 
+def load_tech_info(references_dir: Path) -> dict[str, dict[str, str]]:
+    text = (references_dir / "tech-versions.md").read_text(encoding="utf-8")
+    rows = re.findall(
+        r"^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|",
+        text,
+        re.MULTILINE,
+    )
+    return {
+        tech.strip().lower(): {
+            "version": version.strip(),
+            "release_date": release_date.strip(),
+        }
+        for tech, version, release_date in rows
+        if tech.strip() not in ("Technology", "---", "")
+    }
+
+
 # Returns structured staleness info instead of a bare boolean.
 # Keys: is_stale (bool), reason ("version_mismatch"|"max_age"|"no_version_info"|None),
 #   stale_technologies (list[str]), fresh_technologies (list[str]),

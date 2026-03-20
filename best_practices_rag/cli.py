@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import time
+from datetime import date
 from importlib.resources import files
 from pathlib import Path
 
@@ -24,7 +25,7 @@ from best_practices_rag.logging_setup import configure_skill_logging
 from best_practices_rag.parser import build_synthesized_bundle
 from best_practices_rag.search import search_best_practices
 from best_practices_rag.setup_schema import main as setup_main
-from best_practices_rag.staleness import check_staleness, load_current_versions
+from best_practices_rag.staleness import check_staleness, load_current_versions, load_tech_info
 from best_practices_rag.storage import store_results
 
 
@@ -449,6 +450,45 @@ def check_file_cache_cmd(
     print(json.dumps(result))
 
 
+@app.command("lookup-versions")
+def lookup_versions_cmd(
+    tech: str = typer.Option(..., "--tech", help="Comma-separated technology names"),
+) -> None:
+    """Look up current versions and release dates for technologies.
+
+    Returns JSON with tech_versions, cutoff_date, and not_found fields.
+    Used by bp.md/bpr.md Step 2 to resolve version info via the CLI
+    instead of direct file reads.
+
+    \b
+    Example:
+        best-practices-rag lookup-versions --tech "fastapi,sqlalchemy"
+    """
+    tech_names = [t.strip() for t in tech.split(",") if t.strip()]
+    tech_info = load_tech_info(_find_references_dir())
+
+    tech_versions: dict[str, str] = {}
+    cutoff_dates: list[str] = []
+    not_found: list[str] = []
+
+    for name in tech_names:
+        info = tech_info.get(name.lower())
+        if info:
+            tech_versions[name] = info["version"]
+            if info.get("release_date"):
+                cutoff_dates.append(info["release_date"])
+        else:
+            not_found.append(name)
+
+    cutoff_date = min(cutoff_dates) if cutoff_dates else f"{date.today().year - 2}-01-01"
+
+    print(json.dumps({
+        "tech_versions": tech_versions,
+        "cutoff_date": cutoff_date,
+        "not_found": not_found,
+    }))
+
+
 @app.command()
 def query_kb(
     tech: str = typer.Option(..., help="Comma-separated technology names"),
@@ -494,9 +534,7 @@ def query_kb(
         password=settings.neo4j_password.get_secret_value(),
     )
 
-    current_versions = load_current_versions(
-        Path.home() / ".claude" / "skills" / "best-practices-rag" / "references"
-    )
+    current_versions = load_current_versions(_find_references_dir())
 
     query = " ".join(tech_names + topic_keywords)
     results = query_knowledge_base(

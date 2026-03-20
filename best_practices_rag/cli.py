@@ -110,11 +110,92 @@ def _remove_stale_claude_files(
             if rel not in new_files:
                 stale.add(rel)
 
+    # References scan: remove stale reference files installed before manifest tracking
+    refs_dir = claude_dir / "skills" / "best-practices-rag" / "references"
+    if refs_dir.exists():
+        for f in refs_dir.glob("*.md"):
+            rel = f"skills/best-practices-rag/references/{f.name}"
+            if rel not in new_files:
+                stale.add(rel)
+
     for rel in stale:
         target = claude_dir / rel
         if target.exists():
             target.unlink()
             print(f"  removed (stale): {target}")
+
+
+def _parse_frontmatter(text: str) -> dict[str, str] | None:
+    if not text.startswith("---"):
+        return None
+    end = text.find("---", 3)
+    if end == -1:
+        return None
+    block = text[3:end].strip()
+    result: dict[str, str] = {}
+    for line in block.splitlines():
+        if ":" in line:
+            key, _, value = line.partition(":")
+            result[key.strip()] = value.strip()
+    return result
+
+
+def _find_references_dir() -> Path:
+    local = Path.cwd() / ".claude" / "skills" / "best-practices-rag" / "references"
+    if local.exists():
+        return local
+    return Path.home() / ".claude" / "skills" / "best-practices-rag" / "references"
+
+
+def _check_file_cache(file: Path, model: str | None) -> dict:
+    if not file.exists():
+        return {"hit": False, "reason": "file_not_found"}
+    text = file.read_text(encoding="utf-8")
+    fm = _parse_frontmatter(text)
+    if fm is None:
+        return {"hit": False, "reason": "no_frontmatter"}
+
+    raw_versions = fm.get("tech_versions", "")
+    if raw_versions:
+        try:
+            stored_versions: dict[str, str] = json.loads(raw_versions)
+        except (json.JSONDecodeError, TypeError):
+            stored_versions = {}
+    else:
+        stored_versions = {}
+
+    current_versions = load_current_versions(_find_references_dir())
+
+    stale_techs: list[str] = []
+    version_deltas: dict[str, dict[str, str]] = {}
+    for tech, stored_ver in stored_versions.items():
+        current_ver = current_versions.get(tech.lower())
+        if current_ver is not None and current_ver != stored_ver:
+            stale_techs.append(tech)
+            version_deltas[tech] = {"stored": stored_ver, "current": current_ver}
+
+    if stale_techs:
+        return {
+            "hit": False,
+            "reason": "version_mismatch",
+            "stale_technologies": stale_techs,
+            "version_deltas": version_deltas,
+        }
+
+    if model and fm.get("claude_model", "") != model:
+        return {
+            "hit": False,
+            "reason": "model_mismatch",
+            "stored_model": fm.get("claude_model", ""),
+            "current_model": model,
+        }
+
+    return {
+        "hit": True,
+        "claude_model": fm.get("claude_model", ""),
+        "tech_versions": stored_versions,
+        "synthesized_at": fm.get("synthesized_at", ""),
+    }
 
 
 def _setup_docker_neo4j(config_dir: Path) -> None:
@@ -347,6 +428,25 @@ def check() -> None:
     else:
         print("Some checks failed. See above for details.")
         sys.exit(1)
+
+
+@app.command("check-file-cache")
+def check_file_cache_cmd(
+    file: Path = typer.Option(..., "--file", help="Path to cached synthesis file"),
+    model: str | None = typer.Option(None, "--model", help="Expected model ID"),
+) -> None:
+    """Check whether a cached synthesis file is still valid.
+
+    Reads YAML frontmatter from the file and compares stored tech versions
+    against current versions in tech-versions.md. Returns JSON to stdout.
+    Exit code is always 0; the caller parses the JSON hit field.
+
+    \b
+    Example:
+        best-practices-rag check-file-cache --file .best-practices/fastapi-codegen.md --model claude-sonnet-4-6
+    """
+    result = _check_file_cache(file, model)
+    print(json.dumps(result))
 
 
 @app.command()

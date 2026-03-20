@@ -79,7 +79,7 @@ Run all three Bash calls simultaneously (parallel execution). Use `SEARCH_TECH` 
 **Primary search:**
 
 ```bash
-uv run ~/.claude/skills/best-practices-rag/scripts/search_exa.py \
+best-practices-rag search-exa \
   --query "<PRIMARY_QUERY>" \
   --cutoff-date "<CUTOFF_DATE>" \
   --num-results 10
@@ -88,7 +88,7 @@ uv run ~/.claude/skills/best-practices-rag/scripts/search_exa.py \
 **Failure-mode search:**
 
 ```bash
-uv run ~/.claude/skills/best-practices-rag/scripts/search_exa.py \
+best-practices-rag search-exa \
   --query "<PRIMARY_QUERY> pitfalls gotchas production issues" \
   --cutoff-date "<CUTOFF_DATE>" \
   --num-results 10
@@ -97,7 +97,7 @@ uv run ~/.claude/skills/best-practices-rag/scripts/search_exa.py \
 **Authority search** — targets GitHub Issues/Discussions/READMEs where library authors post design rationale and recommended approaches:
 
 ```bash
-uv run ~/.claude/skills/best-practices-rag/scripts/search_exa.py \
+best-practices-rag search-exa \
   --query "<TECH as space-separated names> <core topic from QUERY> recommended approach design decision rationale" \
   --category github \
   --cutoff-date "<CUTOFF_DATE>" \
@@ -181,7 +181,7 @@ Write the synthesized document to `OUTPUT_FILE` (the workspace-relative path sup
 Call `store_result.py` via Bash. Use `STORE_TECH` (from Step 0) as the `--tech` value — this ensures the gap-filled content is stored as a separate KB node scoped to the uncovered technologies, allowing the synthesizer to retrieve and merge both nodes independently:
 
 ```bash
-uv run ~/.claude/skills/best-practices-rag/scripts/store_result.py \
+best-practices-rag store-result \
   --tech "<STORE_TECH value>" \
   --query "<QUERY value>" \
   --content-file "<OUTPUT_FILE value>" \
@@ -200,7 +200,7 @@ Steps 0–6 are complete. Proceed to Step 7 for MODE-selective final synthesis.
 Run the query command:
 
 ```bash
-uv run ~/.claude/skills/best-practices-rag/scripts/query_kb.py \
+best-practices-rag query-kb \
   --tech "<TECH value>" \
   --topics "<TOPICS value>" \
   [--languages "<LANGUAGES value>"] \

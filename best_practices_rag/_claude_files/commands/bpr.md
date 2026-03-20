@@ -13,6 +13,10 @@ Use this command to conduct in-depth research on software engineering topics, fo
 <!-- Output directory for saved best-practices documents. Change this path to relocate output. -->
 Output directory: `.best-practices/`
 
+> **Path scope**: All `~/.claude/skills/` paths in this command are **project-local** and
+> resolve to `<project-root>/.claude/`, NOT to `~/.claude/`. Use paths exactly as written.
+> Never substitute `~/.claude/` for `~/.claude/`.
+
 ## Workflow
 
 Execute each step in order. Steps 1–4 run in the main session and produce scalar parameters. Step 5 delegates all large-data work to bp-pipeline.
@@ -27,7 +31,7 @@ Parse `$ARGUMENTS`. Identify:
 
 ### Step 2 — Look up current versions
 
-Read `~/.claude/skills/best-practices-rag/references/tech-versions.md`.
+Read `~/.claude/skills/best-practices-rag/references/tech-versions.md` (project-local — NOT `~/.claude/`).
 
 For each technology identified in Step 1:
 - Note the current version to append to Exa queries (e.g., `"FastAPI 0.116"`)
@@ -45,7 +49,7 @@ Compute the output file path:
 If `--force-refresh` was set in Step 1, skip this step.
 
 ```bash
-uv run ~/.claude/skills/best-practices-rag/scripts/check_file_cache.py \
+best-practices-rag check-file-cache \
   --file "<OUTPUT_FILE from Step 2>" \
   --model "<your model ID, e.g. claude-sonnet-4-6>"
 ```
@@ -62,7 +66,7 @@ If `hit` is `false`, continue to Step 3.
 If `--force-refresh` was set in Step 1, skip this step and Step 4 entirely. Set `staleness_reason` to `"force_refresh"` and proceed to Step 5.
 
 ```bash
-uv run ~/.claude/skills/best-practices-rag/scripts/query_kb.py \
+best-practices-rag query-kb \
   --tech "<comma-separated tech names>" \
   --topics "<comma-separated topic keywords>" \
   [--languages "<comma-separated language names>"]

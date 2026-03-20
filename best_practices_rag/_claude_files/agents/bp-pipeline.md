@@ -34,13 +34,13 @@ ALL_QUERIED_TECHS: <comma-separated tech names from the original user query (opt
 
 **Gap path vs cache-hit path**: If `UNCOVERED_TECH` is provided OR the main session determined a full gap (no fresh KB results), this invocation runs Steps 0–6 (gap fill) before Step 7 (synthesis). If the main session detected full coverage (cache hit), skip to Step 7 directly — Steps 0–6 are omitted.
 
-**Cache-hit shortcut**: When all technologies are already covered by fresh KB entries, the caller passes `COVERED_TECHS` and `ALL_QUERIED_TECHS` but omits `UNCOVERED_TECH`, `PRIMARY_QUERY`, `CUTOFF_DATE`, `STALE_CONTEXT_BODY`, `STALE_TECHNOLOGIES`, and `VERSION_DELTAS`. In this case skip to Step 7 immediately.
+**Cache-hit shortcut**: If `COVERED_TECHS` is present and `UNCOVERED_TECH` is absent, this is a cache-hit — all technologies are already covered by fresh KB entries. Skip Steps 0–6 entirely and proceed to Step 7. The caller may include other fields (e.g. `PRIMARY_QUERY`, `CUTOFF_DATE`); ignore them for cache-hit invocations.
 
 ## Workflow
 
 ### Step 0 — Determine search scope (partial gap vs full gap)
 
-Skip this step entirely if this is a cache-hit invocation (no `UNCOVERED_TECH` and the caller indicated full coverage).
+Skip this step entirely if this is a cache-hit invocation (`COVERED_TECHS` is present and `UNCOVERED_TECH` is absent).
 
 If `UNCOVERED_TECH` is provided, this is a **partial gap**: the KB already covers some technologies and you are filling in only the missing ones.
 
@@ -48,7 +48,7 @@ If `UNCOVERED_TECH` is provided, this is a **partial gap**: the KB already cover
 - Set `STORE_TECH` = `UNCOVERED_TECH` (store the result under the gap technologies only, so it becomes a distinct KB node)
 - Scope the synthesis to cover the uncovered technologies in the context of the full query — do not reproduce what is already in the KB
 
-If `UNCOVERED_TECH` is absent and this is NOT a cache-hit, this is a **full gap**:
+If `UNCOVERED_TECH` is absent and `COVERED_TECHS` is absent, this is a **full gap**:
 
 - Set `SEARCH_TECH` = `TECH`
 - Set `STORE_TECH` = `TECH`

@@ -1,6 +1,10 @@
 from pathlib import Path
 
-from best_practices_rag.staleness import check_staleness, load_current_versions, load_tech_info
+from best_practices_rag.staleness import (
+    check_staleness,
+    load_current_versions,
+    load_tech_info,
+)
 
 
 def test_load_current_versions_parses_markdown_table(tmp_path: Path) -> None:

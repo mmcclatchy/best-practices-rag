@@ -6,6 +6,7 @@ from pytest_mock import MockerFixture
 
 from best_practices_rag.cli import check
 from best_practices_rag.cli import main
+from best_practices_rag.cli import query_kb
 from best_practices_rag.cli import setup
 from best_practices_rag.cli import setup_schema
 from best_practices_rag.cli import update
@@ -223,3 +224,77 @@ def test_update_exits_if_no_manager(
         update()
 
     assert exc_info.value.code == 1
+
+
+def test_query_kb_format_md_outputs_markdown(
+    mocker: MockerFixture, capsys: pytest.CaptureFixture[str]
+) -> None:
+    mocker.patch("best_practices_rag.cli.configure_skill_logging")
+    mock_settings = mocker.MagicMock()
+    mock_settings.neo4j_uri = "bolt://localhost:7687"
+    mock_settings.neo4j_username = "neo4j"
+    mock_settings.neo4j_password.get_secret_value.return_value = "test"
+    mocker.patch("best_practices_rag.cli.get_settings", return_value=mock_settings)
+    mocker.patch("best_practices_rag.cli.GraphStore")
+    mocker.patch("best_practices_rag.cli.load_current_versions", return_value={})
+
+    fresh_result = {
+        "name": "fastapi-async",
+        "title": "FastAPI Async Patterns",
+        "display_name": "FastAPI",
+        "version": "0.116",
+        "synthesized_at": "2026-03-15T10:00:00Z",
+        "body": "# FastAPI Async Best Practices\n\nUse async endpoints.",
+    }
+    stale_result = {
+        "name": "sqlalchemy-sessions",
+        "title": "SQLAlchemy Session Management",
+        "display_name": "SQLAlchemy",
+        "version": "2.0",
+        "synthesized_at": "2026-01-10T08:00:00Z",
+        "body": "# SQLAlchemy Sessions\n\nUse scoped sessions.",
+    }
+    mocker.patch(
+        "best_practices_rag.cli.query_knowledge_base",
+        return_value=[fresh_result, stale_result],
+    )
+    mocker.patch(
+        "best_practices_rag.cli.check_staleness",
+        side_effect=[
+            {
+                "is_stale": False,
+                "reason": "current",
+                "stale_technologies": [],
+                "fresh_technologies": ["fastapi"],
+                "version_deltas": {},
+                "document_age_days": 5,
+            },
+            {
+                "is_stale": True,
+                "reason": "version_mismatch",
+                "stale_technologies": ["sqlalchemy"],
+                "fresh_technologies": [],
+                "version_deltas": {"sqlalchemy": {"stored": "2.0", "current": "2.1"}},
+                "document_age_days": 69,
+            },
+        ],
+    )
+
+    query_kb(
+        tech="fastapi,sqlalchemy",
+        topics="async,sessions",
+        languages=None,
+        include_bodies=False,
+        output_format="md",
+    )
+
+    out = capsys.readouterr().out
+    assert "# Knowledge Base Results (2 entries)" in out
+    assert "=== ENTRY: fastapi-async | STATUS: fresh ===" in out
+    assert "=== ENTRY: sqlalchemy-sessions | STATUS: stale ===" in out
+    assert "- **Staleness Reason:** version_mismatch" in out
+    assert "- **Stale Technologies:** sqlalchemy" in out
+    assert "sqlalchemy: 2.0 → 2.1" in out
+    assert "# FastAPI Async Best Practices" in out
+    assert "# SQLAlchemy Sessions" in out
+    assert not out.strip().startswith("{")

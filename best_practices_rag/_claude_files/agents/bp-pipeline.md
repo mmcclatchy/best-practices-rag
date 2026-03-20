@@ -204,16 +204,15 @@ best-practices-rag query-kb \
   --tech "<TECH value>" \
   --topics "<TOPICS value>" \
   [--languages "<LANGUAGES value>"] \
-  --include-bodies
+  --format md
 ```
 
-Parse the JSON from stdout to get result count and staleness metadata. The body content is
-written as plain markdown to the path in `bodies_file`. Read it using the Read tool:
+The output is a markdown document containing metadata and body content for all KB entries.
+Entries are delimited by `=== ENTRY: <name> | STATUS: fresh/stale ===` headers. Each entry's
+metadata appears as bullet lines before a `---` separator, followed by the full body content.
 
-Read <bodies_file path from JSON>
-
-Entries are labeled `STATUS: fresh` or `STATUS: stale`. Collect all `fresh` entries as
-FRESH_DOCS. If no fresh entries exist, treat all entries as candidates regardless of staleness.
+Collect all entries with `STATUS: fresh` as FRESH_DOCS. If no fresh entries exist, treat all
+entries as candidates regardless of staleness.
 
 **Select synthesis format:**
 - If `MODE` is `codegen`, read `~/.claude/skills/best-practices-rag/references/synthesis-format-codegen.md`

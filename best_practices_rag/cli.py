@@ -10,6 +10,7 @@ import time
 from datetime import date
 from importlib.resources import files
 from pathlib import Path
+from typing import Any
 
 import typer
 from neo4j import GraphDatabase
@@ -25,7 +26,11 @@ from best_practices_rag.logging_setup import configure_skill_logging
 from best_practices_rag.parser import build_synthesized_bundle
 from best_practices_rag.search import search_best_practices
 from best_practices_rag.setup_schema import main as setup_main
-from best_practices_rag.staleness import check_staleness, load_current_versions, load_tech_info
+from best_practices_rag.staleness import (
+    check_staleness,
+    load_current_versions,
+    load_tech_info,
+)
 from best_practices_rag.storage import store_results
 
 
@@ -480,13 +485,48 @@ def lookup_versions_cmd(
         else:
             not_found.append(name)
 
-    cutoff_date = min(cutoff_dates) if cutoff_dates else f"{date.today().year - 2}-01-01"
+    cutoff_date = (
+        min(cutoff_dates) if cutoff_dates else f"{date.today().year - 2}-01-01"
+    )
 
-    print(json.dumps({
-        "tech_versions": tech_versions,
-        "cutoff_date": cutoff_date,
-        "not_found": not_found,
-    }))
+    print(
+        json.dumps(
+            {
+                "tech_versions": tech_versions,
+                "cutoff_date": cutoff_date,
+                "not_found": not_found,
+            }
+        )
+    )
+
+
+def _format_results_as_markdown(results: list[dict[str, Any]]) -> str:
+    lines = [f"# Knowledge Base Results ({len(results)} entries)", ""]
+    for r in results:
+        status = "stale" if r.get("is_stale") else "fresh"
+        lines.append(f"=== ENTRY: {r['name']} | STATUS: {status} ===")
+        if r.get("title"):
+            lines.append(f"- **Title:** {r['title']}")
+        if r.get("display_name"):
+            version_str = f" v{r['version']}" if r.get("version") else ""
+            lines.append(f"- **Tech:** {r['display_name']}{version_str}")
+        if r.get("synthesized_at"):
+            age = r.get("document_age_days")
+            age_str = f" ({age} days ago)" if age is not None else ""
+            lines.append(f"- **Synthesized:** {r['synthesized_at']}{age_str}")
+        if r.get("is_stale"):
+            lines.append(f"- **Staleness Reason:** {r.get('staleness_reason', 'unknown')}")
+            if r.get("stale_technologies"):
+                lines.append(f"- **Stale Technologies:** {', '.join(r['stale_technologies'])}")
+            if r.get("version_deltas"):
+                for tech, delta in r["version_deltas"].items():
+                    lines.append(f"- **Version Delta:** {tech}: {delta['stored']} → {delta['current']}")
+        lines.append("---")
+        body = r.get("body", "")
+        if body:
+            lines.append(body)
+        lines.append("")
+    return "\n".join(lines)
 
 
 @app.command()
@@ -499,6 +539,7 @@ def query_kb(
     include_bodies: bool = typer.Option(
         False, help="Include body fields for all non-stale results"
     ),
+    output_format: str = typer.Option("json", "--format", help="Output format: json or md"),
 ) -> None:
     """Query the Neo4j knowledge base for best practices.
 
@@ -553,6 +594,10 @@ def query_kb(
         result["fresh_technologies"] = staleness["fresh_technologies"]
         result["version_deltas"] = staleness["version_deltas"]
         result["document_age_days"] = staleness["document_age_days"]
+
+    if output_format == "md":
+        print(_format_results_as_markdown(results))
+        return
 
     summary = summarize_neo4j_results(results)
 

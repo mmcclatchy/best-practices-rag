@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from pytest_mock import MockerFixture
 
+from best_practices_rag.cli import _generate_slug
 from best_practices_rag.cli import check
 from best_practices_rag.cli import main
 from best_practices_rag.cli import query_kb
@@ -11,6 +12,39 @@ from best_practices_rag.cli import setup
 from best_practices_rag.cli import setup_schema
 from best_practices_rag.cli import update
 from best_practices_rag.cli import version
+
+
+class TestGenerateSlug:
+    def test_sorts_and_dedupes(self) -> None:
+        result = _generate_slug(
+            ["fastapi", "sqlalchemy"], ["session management"], "codegen"
+        )
+        assert result == "fastapi-management-session-sqlalchemy-codegen"
+
+    def test_tech_topic_boundary_irrelevant(self) -> None:
+        as_tech = _generate_slug(["testing"], ["patterns"], "codegen")
+        as_topic = _generate_slug(["patterns"], ["testing"], "codegen")
+        assert as_tech == as_topic
+
+    def test_multiword_topic_split(self) -> None:
+        one_phrase = _generate_slug(["fastapi"], ["session management"], "codegen")
+        two_words = _generate_slug(["fastapi"], ["session", "management"], "codegen")
+        assert one_phrase == two_words
+
+    def test_truncation_at_word_boundary(self) -> None:
+        result = _generate_slug(
+            ["alpha", "bravo", "charlie", "delta", "echo",
+             "foxtrot", "golf", "hotel", "india"],
+            ["juliet", "kilo"],
+            "codegen",
+        )
+        assert result.endswith("-codegen")
+        slug_body = result.removesuffix("-codegen")
+        assert len(slug_body) <= 60
+
+    def test_research_mode_suffix(self) -> None:
+        result = _generate_slug(["fastapi"], ["async"], mode="research")
+        assert result == "async-fastapi-research"
 
 
 def test_setup_schema_success(

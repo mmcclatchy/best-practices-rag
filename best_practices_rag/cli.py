@@ -500,6 +500,41 @@ def lookup_versions_cmd(
     )
 
 
+_SLUG_MAX_LENGTH = 60
+
+
+def _generate_slug(techs: list[str], topics: list[str], mode: str) -> str:
+    words: set[str] = set()
+    for phrase in techs + topics:
+        for w in phrase.lower().split():
+            words.add(w)
+    slug = "-".join(sorted(words))
+    if len(slug) > _SLUG_MAX_LENGTH:
+        slug = slug[:_SLUG_MAX_LENGTH].rsplit("-", 1)[0]
+    return f"{slug}-{mode}"
+
+
+@app.command("generate-slug")
+def generate_slug_cmd(
+    tech: str = typer.Option(..., help="Comma-separated technology names"),
+    topics: str = typer.Option(..., help="Comma-separated topic keywords"),
+    mode: str = typer.Option("codegen", help="Suffix: codegen or research"),
+) -> None:
+    """Generate a deterministic output slug from technologies and topics.
+
+    Merges all words from techs and topics, dedupes, sorts, and joins
+    with hyphens. Truncates at word boundary if exceeding 60 characters,
+    then appends the mode suffix.
+
+    \b
+    Example:
+        best-practices-rag generate-slug --tech "fastapi,sqlalchemy" --topics "async,session management"
+    """
+    tech_names = [t.strip() for t in tech.split(",") if t.strip()]
+    topic_keywords = [t.strip() for t in topics.split(",") if t.strip()]
+    print(_generate_slug(tech_names, topic_keywords, mode))
+
+
 def _format_results_as_markdown(results: list[dict[str, Any]]) -> str:
     lines = [f"# Knowledge Base Results ({len(results)} entries)", ""]
     for r in results:
@@ -515,12 +550,18 @@ def _format_results_as_markdown(results: list[dict[str, Any]]) -> str:
             age_str = f" ({age} days ago)" if age is not None else ""
             lines.append(f"- **Synthesized:** {r['synthesized_at']}{age_str}")
         if r.get("is_stale"):
-            lines.append(f"- **Staleness Reason:** {r.get('staleness_reason', 'unknown')}")
+            lines.append(
+                f"- **Staleness Reason:** {r.get('staleness_reason', 'unknown')}"
+            )
             if r.get("stale_technologies"):
-                lines.append(f"- **Stale Technologies:** {', '.join(r['stale_technologies'])}")
+                lines.append(
+                    f"- **Stale Technologies:** {', '.join(r['stale_technologies'])}"
+                )
             if r.get("version_deltas"):
                 for tech, delta in r["version_deltas"].items():
-                    lines.append(f"- **Version Delta:** {tech}: {delta['stored']} → {delta['current']}")
+                    lines.append(
+                        f"- **Version Delta:** {tech}: {delta['stored']} → {delta['current']}"
+                    )
         lines.append("---")
         body = r.get("body", "")
         if body:
@@ -539,7 +580,9 @@ def query_kb(
     include_bodies: bool = typer.Option(
         False, help="Include body fields for all non-stale results"
     ),
-    output_format: str = typer.Option("json", "--format", help="Output format: json or md"),
+    output_format: str = typer.Option(
+        "json", "--format", help="Output format: json or md"
+    ),
 ) -> None:
     """Query the Neo4j knowledge base for best practices.
 

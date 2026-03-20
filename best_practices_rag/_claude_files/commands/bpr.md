@@ -38,7 +38,12 @@ Parse the JSON:
 - If `tech_versions` is empty (no technologies found), `cutoff_date` defaults to `(current year - 2)-01-01`
 
 Compute the output file path:
-- `OUTPUT_SLUG` = sorted tech names joined by `-` + `-` + topic keywords joined by `-`, truncated to 60 characters, then append `-research` (e.g., `fastapi-sqlalchemy-async-session-management-research`)
+
+```bash
+best-practices-rag generate-slug --tech "<comma-separated tech names>" --topics "<comma-separated topic keywords>" --mode research
+```
+
+- `OUTPUT_SLUG` = stdout from the command above
 - `OUTPUT_FILE` = `.best-practices/<OUTPUT_SLUG>.md`
 
 ### Step 2.5 — Check file cache

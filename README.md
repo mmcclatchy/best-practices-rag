@@ -76,13 +76,13 @@ best-practices-rag setup --neo4j-uri bolt://your-server:7687
 
 ---
 
-### Adding your Exa API key
-
-After setup, edit `~/.config/best-practices-rag/.env` and add:
+### Setup with Exa API key
 
 ```bash
-EXA_API_KEY=your-exa-api-key-here
+best-practices-rag setup --exa-api-key your-exa-api-key-here
 ```
+
+Get a free Exa API key at [exa.ai](https://exa.ai/) (1,000 free requests/month).
 
 ---
 
@@ -183,4 +183,4 @@ Install `uv` and `best-practices-rag` from inside the WSL2 terminal using the Li
 
 ## Version
 
-v0.1.16
+v0.1.17

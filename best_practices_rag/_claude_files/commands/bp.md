@@ -74,6 +74,11 @@ best-practices-rag query-kb \
   [--languages "<comma-separated language names>"]
 ```
 
+If `query-kb` exits with a non-zero exit code, check stdout for a JSON `"error"` field.
+If the error contains `"neo4j_unavailable"`, tell the user:
+"Neo4j is unreachable. Check that Docker is running and credentials are correct (`best-practices-rag check`)."
+Then stop — do not proceed to Step 4 or Step 5.
+
 Parse the JSON from stdout: `{ "count": N, "results": [...], "summary": "..." }`.
 
 Each result includes staleness fields: `is_stale`, `staleness_reason`, `stale_technologies`, `fresh_technologies`, `version_deltas`, `document_age_days`.
@@ -144,9 +149,9 @@ Parse the signal:
 
 ### Step 6 — Output to user
 
-Read `OUTPUT_FILE` (from the bp-pipeline completion signal) and present it as formatted markdown.
+Tell the user the output file path: `OUTPUT_FILE` (from the bp-pipeline completion signal). Do not read or print the file contents.
 
-If `EXTRA_TECHS_FROM_PIPELINE` is non-empty, prepend this blockquote before the document content:
+If `EXTRA_TECHS_FROM_PIPELINE` is non-empty, append this note:
 
 > **Note:** These results cover [EXTRA_TECHS_FROM_PIPELINE joined by " + "] in addition to what you queried. This
 > document assumes [EXTRA_TECHS_FROM_PIPELINE] as the implementation layer. Re-run with explicit technology names

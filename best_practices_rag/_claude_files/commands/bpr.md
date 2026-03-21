@@ -142,7 +142,7 @@ Parse the `Output:` field from the signal and use that path for Step 6.
 
 ### Step 6 — Output to user
 
-Read `OUTPUT_FILE` (from the bp-pipeline completion signal) and present it as formatted markdown.
+Tell the user the output file path: `OUTPUT_FILE` (from the bp-pipeline completion signal). Do not read or print the file contents.
 
 ## References
 

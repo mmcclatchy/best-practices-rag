@@ -1,7 +1,9 @@
+import json
 import sys
 from pathlib import Path
 
 import pytest
+from neo4j.exceptions import AuthError, ServiceUnavailable
 from pytest_mock import MockerFixture
 
 from best_practices_rag.cli import _generate_slug
@@ -110,13 +112,22 @@ def test_setup_standalone_creates_global_files(
     (bundle / "infra").mkdir(parents=True)
     (bundle / "infra" / ".env.example").write_text("# example\n")
 
-    setup(force=False, password=None, neo4j_uri=None, neo4j_username=None)
+    setup(
+        force=False,
+        password=None,
+        neo4j_uri=None,
+        neo4j_username=None,
+        exa_api_key=None,
+        neo4j_port=None,
+    )
 
     config_dir = tmp_path / ".config" / "best-practices-rag"
     assert (config_dir / ".env").exists()
     env_content = (config_dir / ".env").read_text()
     assert "NEO4J_URI=" in env_content
-    assert "NEO4J_PASSWORD=" in env_content
+    assert "NEO4J_PASSWORD" not in env_content
+
+    assert (config_dir / "secrets" / "neo4j_password").exists()
 
 
 def test_setup_existing_neo4j_skips_docker(
@@ -141,6 +152,8 @@ def test_setup_existing_neo4j_skips_docker(
         password=None,
         neo4j_uri="bolt://myserver:7687",
         neo4j_username="neo4j",
+        exa_api_key=None,
+        neo4j_port=None,
     )
 
     mock_setup_main.assert_called_once()
@@ -166,11 +179,22 @@ def test_setup_force_overwrites(
     config_dir = tmp_path / ".config" / "best-practices-rag"
     config_dir.mkdir(parents=True)
     existing_env = config_dir / ".env"
-    existing_env.write_text("NEO4J_PASSWORD=old\n")
+    existing_env.write_text("NEO4J_URI=bolt://localhost:7687\n")
 
-    setup(force=True, password="newpass", neo4j_uri=None, neo4j_username=None)
+    secrets_dir = config_dir / "secrets"
+    secrets_dir.mkdir(exist_ok=True)
+    (secrets_dir / "neo4j_password").write_text("oldpass")
 
-    assert "newpass" in existing_env.read_text()
+    setup(
+        force=True,
+        password="newpass",
+        neo4j_uri=None,
+        neo4j_username=None,
+        exa_api_key=None,
+        neo4j_port=None,
+    )
+
+    assert (secrets_dir / "neo4j_password").read_text() == "oldpass"
 
 
 def test_cmd_check_validates_global_claude_dir(
@@ -196,9 +220,9 @@ def test_cmd_check_validates_global_claude_dir(
 
     mock_settings = mocker.MagicMock()
     mock_settings.neo4j_uri = "bolt://localhost:7687"
-    mock_settings.neo4j_username = "neo4j"
+    mock_settings.neo4j_username = "best-practices-rag"
     mock_settings.neo4j_password.get_secret_value.return_value = "test"
-    mock_settings.exa_api_key.get_secret_value.return_value = ""
+    mock_settings.exa_api_key.get_secret_value.return_value = "test-key"
     mocker.patch("best_practices_rag.cli.get_settings", return_value=mock_settings)
     mock_driver_instance = mocker.MagicMock()
     mocker.patch(
@@ -209,8 +233,8 @@ def test_cmd_check_validates_global_claude_dir(
 
     out = capsys.readouterr().out
     assert "~/.claude/" in out
-    file_check_section = out.split("Neo4j")[0]
-    assert "[FAIL]" not in file_check_section
+    assert "[FAIL]" not in out
+    assert "[pass] Exa API key configured" in out
 
 
 def test_version_prints_version(capsys: pytest.CaptureFixture[str]) -> None:
@@ -279,7 +303,7 @@ def test_query_kb_format_md_outputs_markdown(
     mocker.patch("best_practices_rag.cli.configure_skill_logging")
     mock_settings = mocker.MagicMock()
     mock_settings.neo4j_uri = "bolt://localhost:7687"
-    mock_settings.neo4j_username = "neo4j"
+    mock_settings.neo4j_username = "best-practices-rag"
     mock_settings.neo4j_password.get_secret_value.return_value = "test"
     mocker.patch("best_practices_rag.cli.get_settings", return_value=mock_settings)
     mocker.patch("best_practices_rag.cli.GraphStore")
@@ -345,3 +369,156 @@ def test_query_kb_format_md_outputs_markdown(
     assert "# FastAPI Async Best Practices" in out
     assert "# SQLAlchemy Sessions" in out
     assert not out.strip().startswith("{")
+
+
+def test_query_kb_auth_error_returns_json_and_exits(
+    mocker: MockerFixture, capsys: pytest.CaptureFixture[str]
+) -> None:
+    mocker.patch("best_practices_rag.cli.configure_skill_logging")
+    mock_settings = mocker.MagicMock()
+    mock_settings.neo4j_uri = "bolt://localhost:7687"
+    mock_settings.neo4j_username = "best-practices-rag"
+    mock_settings.neo4j_password.get_secret_value.return_value = "wrong"
+    mocker.patch("best_practices_rag.cli.get_settings", return_value=mock_settings)
+    mocker.patch(
+        "best_practices_rag.cli.GraphStore",
+        side_effect=AuthError("bad credentials"),
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        query_kb(
+            tech="fastapi",
+            topics="async",
+            languages=None,
+            include_bodies=False,
+            output_format="json",
+        )
+
+    assert exc_info.value.code == 1
+    out = capsys.readouterr().out
+    result = json.loads(out)
+    assert result["count"] == 0
+    assert result["results"] == []
+    assert "neo4j_unavailable" in result["error"]
+
+
+def test_query_kb_service_unavailable_returns_json_and_exits(
+    mocker: MockerFixture, capsys: pytest.CaptureFixture[str]
+) -> None:
+    mocker.patch("best_practices_rag.cli.configure_skill_logging")
+    mock_settings = mocker.MagicMock()
+    mock_settings.neo4j_uri = "bolt://localhost:7687"
+    mock_settings.neo4j_username = "best-practices-rag"
+    mock_settings.neo4j_password.get_secret_value.return_value = "test"
+    mocker.patch("best_practices_rag.cli.get_settings", return_value=mock_settings)
+    mocker.patch(
+        "best_practices_rag.cli.GraphStore",
+        side_effect=ServiceUnavailable("connection refused"),
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        query_kb(
+            tech="fastapi",
+            topics="async",
+            languages=None,
+            include_bodies=False,
+            output_format="json",
+        )
+
+    assert exc_info.value.code == 1
+    out = capsys.readouterr().out
+    result = json.loads(out)
+    assert result["count"] == 0
+    assert "neo4j_unavailable" in result["error"]
+
+
+def test_setup_with_exa_api_key(
+    mocker: MockerFixture,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    mocker.patch("pathlib.Path.home", return_value=tmp_path)
+    mocker.patch(
+        "best_practices_rag.cli._bundle_root", return_value=tmp_path / "bundle"
+    )
+    mocker.patch("best_practices_rag.cli._copy_tree", return_value=[])
+    mocker.patch("best_practices_rag.cli._setup_docker_neo4j")
+
+    bundle = tmp_path / "bundle"
+    (bundle / "infra").mkdir(parents=True)
+    (bundle / "infra" / ".env.example").write_text("# example\n")
+
+    setup(
+        force=False,
+        password=None,
+        neo4j_uri=None,
+        neo4j_username=None,
+        exa_api_key="test-exa-key-123",
+        neo4j_port=None,
+    )
+
+    exa_file = tmp_path / ".config" / "best-practices-rag" / "secrets" / "exa_api_key"
+    assert exa_file.exists()
+    assert exa_file.read_text() == "test-exa-key-123"
+
+
+def test_setup_with_neo4j_port(
+    mocker: MockerFixture,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    mocker.patch("pathlib.Path.home", return_value=tmp_path)
+    mocker.patch(
+        "best_practices_rag.cli._bundle_root", return_value=tmp_path / "bundle"
+    )
+    mocker.patch("best_practices_rag.cli._copy_tree", return_value=[])
+    mock_docker = mocker.patch("best_practices_rag.cli._setup_docker_neo4j")
+
+    bundle = tmp_path / "bundle"
+    (bundle / "infra").mkdir(parents=True)
+    (bundle / "infra" / ".env.example").write_text("# example\n")
+
+    setup(
+        force=False,
+        password=None,
+        neo4j_uri=None,
+        neo4j_username=None,
+        exa_api_key=None,
+        neo4j_port=7688,
+    )
+
+    env_content = (tmp_path / ".config" / "best-practices-rag" / ".env").read_text()
+    assert "bolt://localhost:7688" in env_content
+    mock_docker.assert_called_once()
+    call_kwargs = mock_docker.call_args
+    assert call_kwargs[1]["port"] == 7688
+
+
+def test_setup_without_exa_key_prints_instructions(
+    mocker: MockerFixture,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    mocker.patch("pathlib.Path.home", return_value=tmp_path)
+    mocker.patch(
+        "best_practices_rag.cli._bundle_root", return_value=tmp_path / "bundle"
+    )
+    mocker.patch("best_practices_rag.cli._copy_tree", return_value=[])
+    mocker.patch("best_practices_rag.cli._setup_docker_neo4j")
+
+    bundle = tmp_path / "bundle"
+    (bundle / "infra").mkdir(parents=True)
+    (bundle / "infra" / ".env.example").write_text("# example\n")
+
+    setup(
+        force=False,
+        password=None,
+        neo4j_uri=None,
+        neo4j_username=None,
+        exa_api_key=None,
+        neo4j_port=None,
+    )
+
+    out = capsys.readouterr().out
+    assert "[action required]" in out
+    assert "exa_api_key" in out

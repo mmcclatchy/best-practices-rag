@@ -1,5 +1,7 @@
 from unittest.mock import patch
 
+import pytest
+from pydantic import ValidationError
 
 from best_practices_rag.config import Settings
 import best_practices_rag.config as config_module
@@ -71,3 +73,34 @@ def test_preserved_fields_present() -> None:
     assert "neo4j_password" in Settings.model_fields
     assert "exa_api_key" in Settings.model_fields
     assert "exa_content_top_n" in Settings.model_fields
+
+
+def test_neo4j_username_default() -> None:
+    with patch.dict(
+        "os.environ",
+        {
+            "NEO4J_PASSWORD": "test",
+            "EXA_API_KEY": "test",
+        },
+        clear=True,
+    ):
+        s = Settings(_env_file=None, _secrets_dir=None)  # type: ignore[call-arg]
+        assert s.neo4j_username == "best-practices-rag"
+
+
+def test_exa_api_key_required() -> None:
+    with patch.dict(
+        "os.environ",
+        {
+            "NEO4J_PASSWORD": "test",
+        },
+        clear=True,
+    ):
+        with pytest.raises(ValidationError) as exc_info:
+            Settings(_env_file=None, _secrets_dir=None)  # type: ignore[call-arg]
+        errors = exc_info.value.errors()
+        assert any(e["loc"] == ("exa_api_key",) for e in errors)
+
+
+def test_secrets_dir_in_model_config() -> None:
+    assert "secrets_dir" in Settings.model_config

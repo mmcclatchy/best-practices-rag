@@ -14,6 +14,7 @@ from typing import Any
 
 import typer
 from neo4j import GraphDatabase
+from neo4j.exceptions import AuthError, ServiceUnavailable
 
 from best_practices_rag import __version__
 from best_practices_rag.config import get_settings
@@ -32,6 +33,9 @@ from best_practices_rag.staleness import (
     load_tech_info,
 )
 from best_practices_rag.storage import store_results
+
+
+from pydantic import ValidationError
 
 
 app = typer.Typer(
@@ -204,7 +208,7 @@ def _check_file_cache(file: Path, model: str | None) -> dict:
     }
 
 
-def _setup_docker_neo4j(config_dir: Path) -> None:
+def _setup_docker_neo4j(config_dir: Path, *, username: str, port: int = 7687) -> None:
     for cmd in ["docker", "docker compose"]:
         binary = cmd.split()[0]
         if shutil.which(binary) is None:
@@ -214,22 +218,22 @@ def _setup_docker_neo4j(config_dir: Path) -> None:
     bundle = _bundle_root()
 
     compose_file = config_dir / "docker-compose.yml"
-    if not compose_file.exists():
-        shutil.copy2(bundle / "infra" / "docker-compose.yml", compose_file)
-        print("Copied docker-compose.yml")
+    shutil.copy2(bundle / "infra" / "docker-compose.yml", compose_file)
+    if port != 7687:
+        compose_text = compose_file.read_text()
+        compose_file.write_text(compose_text.replace("7687:7687", f"{port}:7687"))
+    print("Copied docker-compose.yml")
 
     secrets_dir = config_dir / "secrets"
     secrets_dir.mkdir(exist_ok=True)
     auth_file = secrets_dir / "neo4j_auth_dev"
     if not auth_file.exists():
-        password = "changeme"
-        env_file = config_dir / ".env"
-        if env_file.exists():
-            for line in env_file.read_text().splitlines():
-                if line.startswith("NEO4J_PASSWORD="):
-                    password = line.split("=", 1)[1].strip()
-                    break
-        auth_file.write_text(f"neo4j/{password}\n")
+        password_file = secrets_dir / "neo4j_password"
+        if password_file.exists():
+            password = password_file.read_text().strip()
+        else:
+            password = "changeme"
+        auth_file.write_text(f"{username}/{password}\n")
         print(f"Created secrets/neo4j_auth_dev (password: {password})")
         if password == "changeme":
             print("  Change this before production use!")
@@ -287,22 +291,28 @@ def setup(
         None, help="Skip Docker, connect to an existing Neo4j instance"
     ),
     neo4j_username: str | None = typer.Option(
-        None, help="Neo4j username (default: neo4j)"
+        None, help="Neo4j username (default: best-practices-rag)"
+    ),
+    exa_api_key: str | None = typer.Option(
+        None, "--exa-api-key", help="Exa API key for web search (required)"
+    ),
+    neo4j_port: int | None = typer.Option(
+        None, "--neo4j-port", help="Neo4j bolt port (default: 7687)"
     ),
 ) -> None:
     """Install best-practices-rag globally.
 
-    Copies skill files to ~/.claude/, writes credentials to
-    ~/.config/best-practices-rag/.env, and starts Neo4j via Docker
-    (unless --neo4j-uri is provided).
+    Copies skill files to ~/.claude/, writes config to
+    ~/.config/best-practices-rag/.env, secrets to secrets/, and starts
+    Neo4j via Docker (unless --neo4j-uri is provided).
 
     \b
     Standalone (Docker):
-        best-practices-rag setup
-        best-practices-rag setup --password mysecretpassword
+        best-practices-rag setup --exa-api-key your-key
+        best-practices-rag setup --password mysecretpassword --exa-api-key your-key
 
     Existing Neo4j:
-        best-practices-rag setup --neo4j-uri bolt://host:7687
+        best-practices-rag setup --neo4j-uri bolt://host:7687 --exa-api-key your-key
     """
     config_dir = Path.home() / ".config" / "best-practices-rag"
     config_dir.mkdir(parents=True, exist_ok=True)
@@ -327,20 +337,39 @@ def setup(
         shutil.copy2(bundle / "infra" / ".env.example", env_example)
         print(f"  copied: {env_example}")
 
+    username = neo4j_username or "best-practices-rag"
+    port = neo4j_port or 7687
+    if neo4j_uri:
+        uri = neo4j_uri
+    elif neo4j_port:
+        uri = f"bolt://localhost:{port}"
+    else:
+        uri = "bolt://localhost:7687"
+
     env_file = config_dir / ".env"
     if not env_file.exists() or force:
-        pwd = password or secrets.token_urlsafe(16)
-        uri = neo4j_uri or "bolt://localhost:7687"
-        username = neo4j_username or "neo4j"
-        env_file.write_text(
-            f"NEO4J_URI={uri}\n"
-            f"NEO4J_USERNAME={username}\n"
-            f"NEO4J_PASSWORD={pwd}\n"
-            "\n"
-            "# Optional — Exa API for web search (enables /bp gap-fill)\n"
-            "# EXA_API_KEY=your-exa-api-key-here\n"
-        )
+        env_file.write_text(f"NEO4J_URI={uri}\nNEO4J_USERNAME={username}\n")
         print(f"  wrote: {env_file}")
+
+    secrets_dir = config_dir / "secrets"
+    secrets_dir.mkdir(exist_ok=True)
+
+    pw_file = secrets_dir / "neo4j_password"
+    if not pw_file.exists():
+        pwd = password or secrets.token_urlsafe(16)
+        pw_file.write_text(pwd)
+        print(f"  wrote: {pw_file}")
+
+    exa_file = secrets_dir / "exa_api_key"
+    if exa_api_key:
+        exa_file.write_text(exa_api_key)
+        print(f"  wrote: {exa_file}")
+    elif not exa_file.exists():
+        print("\n  [action required] Exa API key not provided.")
+        print(
+            "  Add it later:  echo 'your-key' > ~/.config/best-practices-rag/secrets/exa_api_key"
+        )
+        print("  Get a key at:  https://exa.ai/")
 
     if neo4j_uri:
         print("\nApplying schema to existing Neo4j...")
@@ -351,7 +380,7 @@ def setup(
             print(f"Schema setup failed: {e}")
             sys.exit(1)
     else:
-        _setup_docker_neo4j(config_dir)
+        _setup_docker_neo4j(config_dir, username=username, port=port)
 
     print("\nSetup complete. Run 'best-practices-rag check' to validate.")
 
@@ -379,9 +408,10 @@ def check() -> None:
     """Validate the global installation.
 
     Checks that required files exist in ~/.claude/, that Neo4j is
-    reachable with the configured credentials, and reports Exa API key
-    status (optional — needed for /bp gap-fill).
+    reachable with the configured credentials, and verifies the Exa API
+    key is configured (required for /bp gap-fill).
     """
+
     claude_dir = Path.home() / ".claude"
     all_ok = True
 
@@ -407,6 +437,19 @@ def check() -> None:
     print()
     try:
         settings = get_settings()
+    except ValidationError as e:
+        missing = [err["loc"][0] for err in e.errors() if err["type"] == "missing"]
+        for field in missing:
+            print(f"  [FAIL] {field} — not configured")
+        all_ok = False
+        print()
+        if all_ok:
+            print("All checks passed.")
+        else:
+            print("Some checks failed. See above for details.")
+        sys.exit(1)
+
+    try:
         driver = GraphDatabase.driver(
             settings.neo4j_uri,
             auth=(settings.neo4j_username, settings.neo4j_password.get_secret_value()),
@@ -418,15 +461,12 @@ def check() -> None:
         print(f"  [FAIL] Neo4j connection — {e}")
         all_ok = False
 
-    try:
-        settings = get_settings()
-        key = settings.exa_api_key.get_secret_value()
-        if key:
-            print("  [pass] Exa API key configured")
-        else:
-            print("  [info] Exa API key not set (optional — needed for /bp gap-fill)")
-    except Exception:
-        print("  [info] Exa API key not set (optional — needed for /bp gap-fill)")
+    key = settings.exa_api_key.get_secret_value()
+    if key:
+        print("  [pass] Exa API key configured")
+    else:
+        print("  [FAIL] Exa API key not set — required for /bp gap-fill")
+        all_ok = False
 
     print()
     if all_ok:
@@ -611,23 +651,34 @@ def query_kb(
         else None
     )
 
-    settings = get_settings()
-    graph_store = GraphStore(
-        uri=settings.neo4j_uri,
-        username=settings.neo4j_username,
-        password=settings.neo4j_password.get_secret_value(),
-    )
+    try:
+        settings = get_settings()
+        graph_store = GraphStore(
+            uri=settings.neo4j_uri,
+            username=settings.neo4j_username,
+            password=settings.neo4j_password.get_secret_value(),
+        )
 
-    current_versions = load_current_versions(_find_references_dir())
+        current_versions = load_current_versions(_find_references_dir())
 
-    query = " ".join(tech_names + topic_keywords)
-    results = query_knowledge_base(
-        query=query,
-        graph_store=graph_store,
-        tech_names=tech_names,
-        topic_keywords=topic_keywords,
-        lang_names=lang_names,
-    )
+        query = " ".join(tech_names + topic_keywords)
+        results = query_knowledge_base(
+            query=query,
+            graph_store=graph_store,
+            tech_names=tech_names,
+            topic_keywords=topic_keywords,
+            lang_names=lang_names,
+        )
+    except (AuthError, ServiceUnavailable) as exc:
+        log.error("Neo4j connection failed: %s", exc)
+        output = {
+            "count": 0,
+            "results": [],
+            "summary": "",
+            "error": f"neo4j_unavailable: {exc}",
+        }
+        print(json.dumps(output))
+        sys.exit(1)
 
     for result in results:
         staleness = check_staleness(result, current_versions)
@@ -820,14 +871,20 @@ def store_result(
     bp_nodes = [n for n in bundle.nodes if n.label == "BestPractice"]
     node_name = bp_nodes[0].name if bp_nodes else ""
 
-    settings = get_settings()
-    graph_store = GraphStore(
-        uri=settings.neo4j_uri,
-        username=settings.neo4j_username,
-        password=settings.neo4j_password.get_secret_value(),
-    )
+    try:
+        settings = get_settings()
+        graph_store = GraphStore(
+            uri=settings.neo4j_uri,
+            username=settings.neo4j_username,
+            password=settings.neo4j_password.get_secret_value(),
+        )
 
-    nodes_count = store_results(bundle, graph_store)
+        nodes_count = store_results(bundle, graph_store)
+    except (AuthError, ServiceUnavailable) as exc:
+        log.error("Neo4j connection failed: %s", exc)
+        output = {"stored": False, "error": f"neo4j_unavailable: {exc}"}
+        print(json.dumps(output))
+        sys.exit(1)
 
     log.debug(
         "store_result complete — node_name=%r nodes=%d relations=%d",

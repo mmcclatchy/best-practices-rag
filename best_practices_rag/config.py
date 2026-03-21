@@ -4,14 +4,16 @@ from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-_GLOBAL_ENV = Path.home() / ".config" / "best-practices-rag" / ".env"
+_CONFIG_DIR = Path.home() / ".config" / "best-practices-rag"
+_GLOBAL_ENV = _CONFIG_DIR / ".env"
+_SECRETS_DIR = _CONFIG_DIR / "secrets"
 
 
 class Settings(BaseSettings):
     neo4j_uri: str = "bolt://localhost:7687"
-    neo4j_username: str = "neo4j"
+    neo4j_username: str = "best-practices-rag"
     neo4j_password: SecretStr
-    exa_api_key: SecretStr = SecretStr("")
+    exa_api_key: SecretStr
     exa_content_top_n: int = 5
     exa_exclude_domains: list[str] = [
         "w3schools.com",
@@ -23,6 +25,7 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_file=[str(_GLOBAL_ENV), ".env"],  # global default, CWD overrides
+        secrets_dir=str(_SECRETS_DIR),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",

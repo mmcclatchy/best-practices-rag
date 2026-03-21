@@ -15,7 +15,8 @@ def test_main_runs_migrations(mocker: MockerFixture) -> None:
     mocker.patch(
         "best_practices_rag.setup_schema.get_settings", return_value=MagicMock()
     )
-    mocker.patch("best_practices_rag.setup_schema.GraphDatabase.driver")
+    mock_driver = mocker.patch("best_practices_rag.setup_schema.GraphDatabase.driver")
+    mock_driver.return_value.execute_query.return_value = ([{"cnt": 0}], None, None)
 
     run_migrations()
 

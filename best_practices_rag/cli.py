@@ -276,12 +276,31 @@ def _setup_docker_neo4j(config_dir: Path, *, port: int = 7687) -> None:
 
     uri = "bolt://localhost:" + str(port)
     pw_file = config_dir / "secrets" / "neo4j_password"
+    password = pw_file.read_text().strip() if pw_file.exists() else ""
     container = "best-practices-rag-neo4j"
     print("\nConnecting to Neo4j:")
     print(f"  container:  {container}")
     print(f"  uri:        {uri}")
     print("  username:   neo4j")
     print(f"  password:   {pw_file}")
+
+    print("\nWaiting for bolt connection...")
+    bolt_timeout = 30
+    bolt_elapsed = 0
+    while bolt_elapsed < bolt_timeout:
+        try:
+            driver = GraphDatabase.driver(uri, auth=("neo4j", password))
+            driver.verify_connectivity()
+            driver.close()
+            print("Bolt connection ready.")
+            break
+        except Exception:
+            time.sleep(2)
+            bolt_elapsed += 2
+            print(f"  waiting for bolt... ({bolt_elapsed}s / {bolt_timeout}s)")
+    else:
+        print(f"Warning: bolt connection not ready within {bolt_timeout}s.")
+        print("You can retry later with: best-practices-rag setup-schema")
 
     print("\nApplying database schema...")
     try:

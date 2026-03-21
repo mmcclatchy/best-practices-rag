@@ -880,6 +880,23 @@ def query_kb(
     print(json.dumps(output))
 
 
+def _format_exa_results_as_markdown(results: list[dict[str, Any]]) -> str:
+    lines = [f"# Exa Search Results ({len(results)} entries)", ""]
+    for r in results:
+        lines.append(f"=== RESULT: {r['url']} ===")
+        if r.get("title"):
+            lines.append(f"- **Title:** {r['title']}")
+        if r.get("published_date"):
+            lines.append(f"- **Published:** {r['published_date']}")
+        if r.get("summary"):
+            lines.append(f"- **Summary:** {r['summary']}")
+        lines.append("---")
+        if r.get("text"):
+            lines.append(r["text"])
+        lines.append("")
+    return "\n".join(lines)
+
+
 @app.command()
 def search_exa(
     query: str = typer.Option(..., help="Search query string"),
@@ -894,26 +911,36 @@ def search_exa(
     category: str | None = typer.Option(
         None, help="Exa category filter (e.g. github, blog, paper)"
     ),
+    output_file: str | None = typer.Option(
+        None,
+        "--output-file",
+        help="Write results as markdown to file, print summary to stdout",
+    ),
 ) -> None:
     """Search Exa for best practices content.
 
     Used internally by the bp-pipeline agent when the knowledge base has
     a gap. Returns JSON to stdout.
 
+    When --output-file is provided, writes full results as markdown to the
+    file and prints only a compact JSON summary to stdout.
+
     \b
     Example:
         best-practices-rag search-exa --query "FastAPI async session management"
+        best-practices-rag search-exa --query "FastAPI async" --output-file /tmp/bp_exa_primary.md
     """
     configure_skill_logging()
     log = logging.getLogger(__name__)
     log.debug(
-        "search_exa invoked — query=%r exclude_domains=%r cutoff_date=%r num_results=%d top_n=%d category=%r",
+        "search_exa invoked — query=%r exclude_domains=%r cutoff_date=%r num_results=%d top_n=%d category=%r output_file=%r",
         query,
         exclude_domains,
         cutoff_date,
         num_results,
         top_n,
         category,
+        output_file,
     )
 
     domains = (
@@ -930,25 +957,38 @@ def search_exa(
         category=category,
     )
 
+    top_results = [
+        {
+            "url": r.url,
+            "title": r.title,
+            "summary": r.summary,
+            "published_date": r.published_date,
+            "text": r.text,
+        }
+        for r in results[:top_n]
+    ]
+
     log.debug(
         "search_exa complete — %d total results, returning top %d",
         len(results),
         top_n,
     )
-    output = {
-        "count": len(results),
-        "results": [
-            {
-                "url": r.url,
-                "title": r.title,
-                "summary": r.summary,
-                "published_date": r.published_date,
-                "text": r.text,
-            }
-            for r in results[:top_n]
-        ],
-    }
-    print(json.dumps(output))
+
+    if output_file:
+        md_content = _format_exa_results_as_markdown(top_results)
+        Path(output_file).write_text(md_content, encoding="utf-8")
+        summary = {
+            "count": len(top_results),
+            "output_file": output_file,
+            "urls": [r["url"] for r in top_results],
+        }
+        print(json.dumps(summary))
+    else:
+        output = {
+            "count": len(results),
+            "results": top_results,
+        }
+        print(json.dumps(output))
 
 
 @app.command()

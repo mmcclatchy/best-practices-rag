@@ -17,25 +17,21 @@ logger = logging.getLogger(__name__)
 _MIGRATIONS_PATH = Path(__file__).parent / "migrations"
 
 
-def _clear_baseline_if_no_schema(driver: Driver) -> None:
+def _ensure_schema(driver: Driver) -> None:
     records, _, _ = driver.execute_query(
-        "MATCH (m:__Neo4jMigration) "
-        "WHERE m.version = 'BASELINE' "
-        "AND NOT EXISTS { MATCH (m)-[:MIGRATED_TO]->() } "
-        "RETURN count(m) AS cnt",
+        "SHOW INDEXES YIELD name WHERE name = 'bp_fulltext' RETURN count(*) AS cnt",
         database_="neo4j",
     )
     if records and records[0]["cnt"] > 0:
-        has_schema, _, _ = driver.execute_query(
-            "SHOW INDEXES YIELD name WHERE name = 'bp_fulltext' RETURN count(*) AS cnt",
-            database_="neo4j",
-        )
-        if has_schema and has_schema[0]["cnt"] == 0:
-            driver.execute_query(
-                "MATCH (m:__Neo4jMigration) DETACH DELETE m",
-                database_="neo4j",
-            )
-            logger.info("Cleared stale BASELINE — schema will be applied fresh")
+        return
+
+    logger.info("Fulltext index missing — applying schema directly")
+    migration_file = _MIGRATIONS_PATH / "V0001__initial_schema.cypher"
+    for statement in migration_file.read_text().strip().split(";"):
+        statement = statement.strip()
+        if statement:
+            driver.execute_query(statement, database_="neo4j")  # type: ignore[arg-type]
+    logger.info("Schema applied directly")
 
 
 def run_migrations() -> None:
@@ -47,8 +43,8 @@ def run_migrations() -> None:
     try:
         driver.verify_connectivity()
         logger.info("Connected to Neo4j at %s", settings.neo4j_uri)
-        _clear_baseline_if_no_schema(driver)
         Executor(driver, migrations_path=_MIGRATIONS_PATH).migrate()
+        _ensure_schema(driver)
         logger.info("Schema migrations complete.")
     finally:
         driver.close()

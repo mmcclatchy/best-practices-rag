@@ -497,17 +497,46 @@ def check() -> None:
             print("Some checks failed. See above for details.")
         sys.exit(1)
 
+    driver = None
     try:
         driver = GraphDatabase.driver(
             settings.neo4j_uri,
             auth=(settings.neo4j_username, settings.neo4j_password.get_secret_value()),
         )
         driver.verify_connectivity()
-        driver.close()
         print("  [pass] Neo4j connection")
     except Exception as e:
         print(f"  [FAIL] Neo4j connection — {e}")
         all_ok = False
+
+    if driver:
+        try:
+            expected_indexes = [
+                "bp_fulltext",
+                "constraint_best_practice_id",
+                "constraint_technology_id",
+                "constraint_pattern_id",
+                "index_best_practice_name",
+                "index_best_practice_category",
+                "index_technology_name",
+            ]
+            records, _, _ = driver.execute_query(
+                "SHOW INDEXES YIELD name RETURN collect(name) AS names",
+                database_="neo4j",
+            )
+            existing = set(records[0]["names"]) if records else set()
+            missing = [idx for idx in expected_indexes if idx not in existing]
+            if missing:
+                print(f"  [FAIL] Schema — missing indexes: {', '.join(missing)}")
+                print("    Run: best-practices-rag setup-schema")
+                all_ok = False
+            else:
+                print("  [pass] Schema indexes")
+        except Exception as e:
+            print(f"  [FAIL] Schema check — {e}")
+            all_ok = False
+        finally:
+            driver.close()
 
     key = settings.exa_api_key.get_secret_value()
     if key:

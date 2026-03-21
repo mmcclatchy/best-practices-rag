@@ -225,6 +225,20 @@ def test_cmd_check_validates_global_claude_dir(
     mock_settings.exa_api_key.get_secret_value.return_value = "test-key"
     mocker.patch("best_practices_rag.cli.get_settings", return_value=mock_settings)
     mock_driver_instance = mocker.MagicMock()
+    all_index_names = [
+        "bp_fulltext",
+        "constraint_best_practice_id",
+        "constraint_technology_id",
+        "constraint_pattern_id",
+        "index_best_practice_name",
+        "index_best_practice_category",
+        "index_technology_name",
+    ]
+    mock_driver_instance.execute_query.return_value = (
+        [{"names": all_index_names}],
+        None,
+        None,
+    )
     mocker.patch(
         "best_practices_rag.cli.GraphDatabase.driver", return_value=mock_driver_instance
     )
@@ -235,6 +249,7 @@ def test_cmd_check_validates_global_claude_dir(
     assert "~/.claude/" in out
     assert "[FAIL]" not in out
     assert "[pass] Exa API key configured" in out
+    assert "[pass] Schema indexes" in out
 
 
 def test_version_prints_version(capsys: pytest.CaptureFixture[str]) -> None:

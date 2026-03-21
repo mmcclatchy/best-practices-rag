@@ -1007,10 +1007,8 @@ def reset(
         sys.exit(1)
     print(result.stderr.strip())
 
-    auth_file = config_dir / "secrets" / "neo4j_auth"
-    if auth_file.exists():
-        auth_file.unlink()
-        print("  removed: secrets/neo4j_auth")
+    shutil.rmtree(config_dir)
+    print(f"  removed: {config_dir}")
 
     print("\nReset complete. Run 'best-practices-rag setup' to re-initialize.")
 

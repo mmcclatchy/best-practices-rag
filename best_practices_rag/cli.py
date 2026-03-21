@@ -274,6 +274,15 @@ def _setup_docker_neo4j(config_dir: Path, *, port: int = 7687) -> None:
         print(f"Warning: Neo4j did not become healthy within {timeout}s.")
         print("It may still be starting. Check with: docker compose ps")
 
+    uri = "bolt://localhost:" + str(port)
+    pw_file = config_dir / "secrets" / "neo4j_password"
+    container = "best-practices-rag-neo4j"
+    print("\nConnecting to Neo4j:")
+    print(f"  container:  {container}")
+    print(f"  uri:        {uri}")
+    print("  username:   neo4j")
+    print(f"  password:   {pw_file}")
+
     print("\nApplying database schema...")
     try:
         _run_setup_schema()
@@ -374,8 +383,14 @@ def setup(
         )
         print("  Get a key at:  https://exa.ai/")
 
+    pw_file = secrets_dir / "neo4j_password"
+
     if neo4j_uri:
-        print("\nApplying schema to existing Neo4j...")
+        print("\nConnecting to existing Neo4j:")
+        print(f"  uri:        {uri}")
+        print(f"  username:   {username}")
+        print(f"  password:   {pw_file}")
+        print("\nApplying schema...")
         try:
             _run_setup_schema()
             print("Schema applied successfully.")
@@ -488,6 +503,81 @@ def check() -> None:
     else:
         print("Some checks failed. See above for details.")
         sys.exit(1)
+
+
+@app.command()
+def details() -> None:
+    """Show configuration and Docker details.
+
+    Displays paths to config files, secrets, Docker container status,
+    and connection parameters. Useful for debugging setup issues.
+    """
+    config_dir = Path.home() / ".config" / "best-practices-rag"
+    env_file = config_dir / ".env"
+    secrets_dir = config_dir / "secrets"
+    compose_file = config_dir / "docker-compose.yml"
+
+    print("Configuration:")
+    print(f"  config dir:       {config_dir}")
+    print(
+        f"  .env:             {env_file}" + ("" if env_file.exists() else " (missing)")
+    )
+    print(
+        f"  docker-compose:   {compose_file}"
+        + ("" if compose_file.exists() else " (missing)")
+    )
+
+    print(f"\nSecrets ({secrets_dir}):")
+    for name in ["neo4j_password", "neo4j_auth", "exa_api_key"]:
+        f = secrets_dir / name
+        status = "present" if f.exists() else "missing"
+        print(f"  {name:20s} [{status}]")
+
+    uri = "bolt://localhost:7687"
+    username = "neo4j"
+    if env_file.exists():
+        for line in env_file.read_text().splitlines():
+            if line.startswith("NEO4J_URI="):
+                uri = line.split("=", 1)[1].strip()
+            elif line.startswith("NEO4J_USERNAME="):
+                username = line.split("=", 1)[1].strip()
+
+    print("\nNeo4j connection:")
+    print(f"  uri:              {uri}")
+    print(f"  username:         {username}")
+    print(f"  password:         {secrets_dir / 'neo4j_password'}")
+
+    print("\nExa API:")
+    print(f"  key:              {secrets_dir / 'exa_api_key'}")
+
+    if compose_file.exists():
+        container = ""
+        for line in compose_file.read_text().splitlines():
+            if "container_name:" in line:
+                container = line.split(":", 1)[1].strip()
+                break
+
+        print("\nDocker:")
+        print(f"  container:        {container}")
+
+        ps = subprocess.run(
+            ["docker", "compose", "ps", "--format", "json"],
+            capture_output=True,
+            text=True,
+            cwd=str(config_dir),
+        )
+        if ps.returncode == 0 and ps.stdout.strip():
+            try:
+                for entry in json.loads(f"[{ps.stdout.strip().replace(chr(10), ',')}]"):
+                    name = entry.get("Name", "")
+                    state = entry.get("State", "unknown")
+                    health = entry.get("Health", "")
+                    status = f"{state} ({health})" if health else state
+                    print(f"  status:           {name} — {status}")
+            except (json.JSONDecodeError, TypeError):
+                print(f"  status:           {ps.stdout.strip()}")
+        else:
+            print("  status:           not running")
 
 
 @app.command("check-file-cache")
@@ -1063,6 +1153,22 @@ def update() -> None:
             if compose_file.exists():
                 shutil.copy2(bundle / "infra" / "docker-compose.yml", compose_file)
                 print("  updated: docker-compose.yml")
+
+            env_file = config_dir / ".env"
+            uri = "bolt://localhost:7687"
+            username = "neo4j"
+            if env_file.exists():
+                for line in env_file.read_text().splitlines():
+                    if line.startswith("NEO4J_URI="):
+                        uri = line.split("=", 1)[1].strip()
+                    elif line.startswith("NEO4J_USERNAME="):
+                        username = line.split("=", 1)[1].strip()
+            pw_file = config_dir / "secrets" / "neo4j_password"
+
+            print("\nConnecting to Neo4j:")
+            print(f"  uri:        {uri}")
+            print(f"  username:   {username}")
+            print(f"  password:   {pw_file}")
 
             print("\nApplying database schema...")
             try:

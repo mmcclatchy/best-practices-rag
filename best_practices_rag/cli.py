@@ -354,12 +354,12 @@ def setup(
     bundle = _bundle_root()
     new_files = _bundle_claude_files(bundle)
     _remove_stale_claude_files(claude_dir, config_dir, new_files)
-    _copy_tree(bundle / "commands", claude_dir / "commands", force=force)
-    _copy_tree(bundle / "agents", claude_dir / "agents", force=force)
+    _copy_tree(bundle / "commands", claude_dir / "commands", force=True)
+    _copy_tree(bundle / "agents", claude_dir / "agents", force=True)
     _copy_tree(
         bundle / "skills" / "best-practices-rag",
         claude_dir / "skills" / "best-practices-rag",
-        force=force,
+        force=True,
     )
     _write_manifest(config_dir, new_files)
 

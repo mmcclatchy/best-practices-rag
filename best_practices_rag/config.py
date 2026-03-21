@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     exa_min_published_year_offset: int = 2
 
     model_config = SettingsConfigDict(
-        env_file=[str(_GLOBAL_ENV), ".env"],  # global default, CWD overrides
+        env_file=str(_GLOBAL_ENV),
         secrets_dir=str(_SECRETS_DIR),
         env_file_encoding="utf-8",
         case_sensitive=False,

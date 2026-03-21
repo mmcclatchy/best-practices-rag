@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -88,7 +89,7 @@ def test_neo4j_username_default() -> None:
         assert s.neo4j_username == "neo4j"
 
 
-def test_exa_api_key_required() -> None:
+def test_exa_api_key_required(tmp_path: Path) -> None:
     with patch.dict(
         "os.environ",
         {
@@ -97,7 +98,7 @@ def test_exa_api_key_required() -> None:
         clear=True,
     ):
         with pytest.raises(ValidationError) as exc_info:
-            Settings(_env_file=None, _secrets_dir=None)  # type: ignore[call-arg]
+            Settings(_env_file=None, _secrets_dir=str(tmp_path / "empty"))  # type: ignore[call-arg]
         errors = exc_info.value.errors()
         assert any(e["loc"] == ("exa_api_key",) for e in errors)
 

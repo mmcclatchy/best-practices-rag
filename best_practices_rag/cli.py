@@ -208,7 +208,7 @@ def _check_file_cache(file: Path, model: str | None) -> dict:
     }
 
 
-def _setup_docker_neo4j(config_dir: Path, *, username: str, port: int = 7687) -> None:
+def _setup_docker_neo4j(config_dir: Path, *, port: int = 7687) -> None:
     for cmd in ["docker", "docker compose"]:
         binary = cmd.split()[0]
         if shutil.which(binary) is None:
@@ -233,7 +233,7 @@ def _setup_docker_neo4j(config_dir: Path, *, username: str, port: int = 7687) ->
             password = password_file.read_text().strip()
         else:
             password = "changeme"
-        auth_file.write_text(f"{username}/{password}\n")
+        auth_file.write_text(f"neo4j/{password}\n")
         print(f"Created secrets/neo4j_auth_dev (password: {password})")
         if password == "changeme":
             print("  Change this before production use!")
@@ -380,7 +380,7 @@ def setup(
             print(f"Schema setup failed: {e}")
             sys.exit(1)
     else:
-        _setup_docker_neo4j(config_dir, username=username, port=port)
+        _setup_docker_neo4j(config_dir, port=port)
 
     print("\nSetup complete. Run 'best-practices-rag check' to validate.")
 

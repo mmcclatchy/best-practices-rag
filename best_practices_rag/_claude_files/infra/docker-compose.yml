@@ -31,4 +31,4 @@ volumes:
 
 secrets:
   neo4j_auth:
-    file: ./secrets/neo4j_auth_dev
+    file: ./secrets/neo4j_auth

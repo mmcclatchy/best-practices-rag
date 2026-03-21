@@ -26,7 +26,7 @@ from best_practices_rag.knowledge_base import (
 from best_practices_rag.logging_setup import configure_skill_logging
 from best_practices_rag.parser import build_synthesized_bundle
 from best_practices_rag.search import search_best_practices
-from best_practices_rag.setup_schema import main as setup_main
+from best_practices_rag.setup_schema import run_migrations
 from best_practices_rag.staleness import (
     check_staleness,
     load_current_versions,
@@ -99,12 +99,15 @@ def _write_manifest(config_dir: Path, files: set[str]) -> None:
 
 def _run_setup_schema() -> None:
     neo4j_log = logging.getLogger("neo4j")
-    original_level = neo4j_log.level
+    schema_log = logging.getLogger("best_practices_rag.setup_schema")
+    saved_levels = neo4j_log.level, schema_log.level
     neo4j_log.setLevel(logging.ERROR)
+    schema_log.setLevel(logging.ERROR)
     try:
-        setup_main()
+        run_migrations()
     finally:
-        neo4j_log.setLevel(original_level)
+        neo4j_log.setLevel(saved_levels[0])
+        schema_log.setLevel(saved_levels[1])
 
 
 def _remove_stale_claude_files(
@@ -226,7 +229,7 @@ def _setup_docker_neo4j(config_dir: Path, *, port: int = 7687) -> None:
 
     secrets_dir = config_dir / "secrets"
     secrets_dir.mkdir(exist_ok=True)
-    auth_file = secrets_dir / "neo4j_auth_dev"
+    auth_file = secrets_dir / "neo4j_auth"
     if not auth_file.exists():
         password_file = secrets_dir / "neo4j_password"
         if password_file.exists():
@@ -234,7 +237,7 @@ def _setup_docker_neo4j(config_dir: Path, *, port: int = 7687) -> None:
         else:
             password = "changeme"
         auth_file.write_text(f"neo4j/{password}\n")
-        print(f"Created secrets/neo4j_auth_dev (password: {password})")
+        print(f"Created secrets/neo4j_auth (password: {password})")
         if password == "changeme":
             print("  Change this before production use!")
 
@@ -291,7 +294,7 @@ def setup(
         None, help="Skip Docker, connect to an existing Neo4j instance"
     ),
     neo4j_username: str | None = typer.Option(
-        None, help="Neo4j username (default: best-practices-rag)"
+        None, help="Neo4j username (default: neo4j)"
     ),
     exa_api_key: str | None = typer.Option(
         None, "--exa-api-key", help="Exa API key for web search (required)"
@@ -337,7 +340,7 @@ def setup(
         shutil.copy2(bundle / "infra" / ".env.example", env_example)
         print(f"  copied: {env_example}")
 
-    username = neo4j_username or "best-practices-rag"
+    username = neo4j_username or "neo4j"
     port = neo4j_port or 7687
     if neo4j_uri:
         uri = neo4j_uri
@@ -398,6 +401,17 @@ def setup_schema() -> None:
     try:
         _run_setup_schema()
         print("Schema applied successfully.")
+    except ServiceUnavailable:
+        print("Error: Neo4j not reachable. Is the database running?")
+        print(
+            "  Start it with: docker compose -f ~/.config/best-practices-rag/docker-compose.yml up -d"
+        )
+        sys.exit(1)
+    except AuthError:
+        print(
+            "Error: Neo4j authentication failed. Check credentials in ~/.config/best-practices-rag/"
+        )
+        sys.exit(1)
     except Exception as e:
         print(f"Schema setup failed: {e}")
         sys.exit(1)
@@ -958,6 +972,50 @@ def uninstall(
 
 
 @app.command()
+def reset(
+    keep_data: bool = typer.Option(False, "--keep-data", help="Keep Neo4j volumes"),
+) -> None:
+    """Stop Neo4j and remove Docker containers/volumes.
+
+    Use this before re-running setup to get a clean state. Removes the
+    auth file so setup can regenerate it.
+
+    \b
+    Full reset (removes all data):
+        best-practices-rag reset
+        best-practices-rag setup --exa-api-key your-key
+
+    Keep database data:
+        best-practices-rag reset --keep-data
+    """
+    config_dir = Path.home() / ".config" / "best-practices-rag"
+    compose_file = config_dir / "docker-compose.yml"
+
+    if not compose_file.exists():
+        print("No docker-compose.yml found. Nothing to reset.")
+        return
+
+    print("Stopping Neo4j containers...")
+    down_cmd = ["docker", "compose", "down"]
+    if not keep_data:
+        down_cmd.append("-v")
+    result = subprocess.run(
+        down_cmd, capture_output=True, text=True, cwd=str(config_dir)
+    )
+    if result.returncode != 0:
+        print(f"Error: {result.stderr}")
+        sys.exit(1)
+    print(result.stderr.strip())
+
+    auth_file = config_dir / "secrets" / "neo4j_auth"
+    if auth_file.exists():
+        auth_file.unlink()
+        print("  removed: secrets/neo4j_auth")
+
+    print("\nReset complete. Run 'best-practices-rag setup' to re-initialize.")
+
+
+@app.command()
 def version() -> None:
     """Show the installed version.
 
@@ -1003,13 +1061,26 @@ def update() -> None:
             )
             _write_manifest(config_dir, new_files)
 
+            compose_file = config_dir / "docker-compose.yml"
+            if compose_file.exists():
+                shutil.copy2(bundle / "infra" / "docker-compose.yml", compose_file)
+                print("  updated: docker-compose.yml")
+
             print("\nApplying database schema...")
             try:
                 _run_setup_schema()
                 print("Schema applied successfully.")
+            except ServiceUnavailable:
+                print(
+                    "  [skip] Neo4j not reachable — schema will be applied on next setup or setup-schema"
+                )
+            except AuthError:
+                print(
+                    "  [skip] Neo4j auth failed — check credentials in ~/.config/best-practices-rag/"
+                )
             except Exception as e:
-                print(f"Schema setup failed: {e}")
-                print("You can retry later with: best-practices-rag setup-schema")
+                print(f"  [skip] Schema setup failed: {e}")
+                print("  You can retry later with: best-practices-rag setup-schema")
 
             return
 

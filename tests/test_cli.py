@@ -61,7 +61,7 @@ class TestGenerateSlug:
 def test_setup_schema_success(
     mocker: MockerFixture, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    mock_setup = mocker.patch("best_practices_rag.cli.setup_main")
+    mock_setup = mocker.patch("best_practices_rag.cli.run_migrations")
 
     setup_schema()
 
@@ -75,7 +75,7 @@ def test_setup_schema_failure_exits(
     mocker: MockerFixture, capsys: pytest.CaptureFixture[str]
 ) -> None:
     mocker.patch(
-        "best_practices_rag.cli.setup_main",
+        "best_practices_rag.cli.run_migrations",
         side_effect=RuntimeError("connection refused"),
     )
 
@@ -140,7 +140,7 @@ def test_setup_existing_neo4j_skips_docker(
         "best_practices_rag.cli._bundle_root", return_value=tmp_path / "bundle"
     )
     mocker.patch("best_practices_rag.cli._copy_tree", return_value=[])
-    mock_setup_main = mocker.patch("best_practices_rag.cli.setup_main")
+    mock_setup_main = mocker.patch("best_practices_rag.cli.run_migrations")
     mock_docker = mocker.patch("best_practices_rag.cli._setup_docker_neo4j")
 
     bundle = tmp_path / "bundle"
@@ -220,7 +220,7 @@ def test_cmd_check_validates_global_claude_dir(
 
     mock_settings = mocker.MagicMock()
     mock_settings.neo4j_uri = "bolt://localhost:7687"
-    mock_settings.neo4j_username = "best-practices-rag"
+    mock_settings.neo4j_username = "neo4j"
     mock_settings.neo4j_password.get_secret_value.return_value = "test"
     mock_settings.exa_api_key.get_secret_value.return_value = "test-key"
     mocker.patch("best_practices_rag.cli.get_settings", return_value=mock_settings)
@@ -303,7 +303,7 @@ def test_query_kb_format_md_outputs_markdown(
     mocker.patch("best_practices_rag.cli.configure_skill_logging")
     mock_settings = mocker.MagicMock()
     mock_settings.neo4j_uri = "bolt://localhost:7687"
-    mock_settings.neo4j_username = "best-practices-rag"
+    mock_settings.neo4j_username = "neo4j"
     mock_settings.neo4j_password.get_secret_value.return_value = "test"
     mocker.patch("best_practices_rag.cli.get_settings", return_value=mock_settings)
     mocker.patch("best_practices_rag.cli.GraphStore")
@@ -377,7 +377,7 @@ def test_query_kb_auth_error_returns_json_and_exits(
     mocker.patch("best_practices_rag.cli.configure_skill_logging")
     mock_settings = mocker.MagicMock()
     mock_settings.neo4j_uri = "bolt://localhost:7687"
-    mock_settings.neo4j_username = "best-practices-rag"
+    mock_settings.neo4j_username = "neo4j"
     mock_settings.neo4j_password.get_secret_value.return_value = "wrong"
     mocker.patch("best_practices_rag.cli.get_settings", return_value=mock_settings)
     mocker.patch(
@@ -408,7 +408,7 @@ def test_query_kb_service_unavailable_returns_json_and_exits(
     mocker.patch("best_practices_rag.cli.configure_skill_logging")
     mock_settings = mocker.MagicMock()
     mock_settings.neo4j_uri = "bolt://localhost:7687"
-    mock_settings.neo4j_username = "best-practices-rag"
+    mock_settings.neo4j_username = "neo4j"
     mock_settings.neo4j_password.get_secret_value.return_value = "test"
     mocker.patch("best_practices_rag.cli.get_settings", return_value=mock_settings)
     mocker.patch(

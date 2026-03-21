@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 from pytest_mock import MockerFixture
 
-from best_practices_rag.setup_schema import main
+from best_practices_rag.setup_schema import run_migrations
 
 
 def test_main_runs_migrations(mocker: MockerFixture) -> None:
@@ -17,7 +17,7 @@ def test_main_runs_migrations(mocker: MockerFixture) -> None:
     )
     mocker.patch("best_practices_rag.setup_schema.GraphDatabase.driver")
 
-    main()
+    run_migrations()
 
     mock_executor_cls.assert_called_once()
     call_kwargs = mock_executor_cls.call_args

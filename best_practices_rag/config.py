@@ -11,7 +11,7 @@ _SECRETS_DIR = _CONFIG_DIR / "secrets"
 
 class Settings(BaseSettings):
     neo4j_uri: str = "bolt://localhost:7687"
-    neo4j_username: str = "best-practices-rag"
+    neo4j_username: str = "neo4j"
     neo4j_password: SecretStr
     exa_api_key: SecretStr
     exa_content_top_n: int = 5

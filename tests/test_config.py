@@ -85,7 +85,7 @@ def test_neo4j_username_default() -> None:
         clear=True,
     ):
         s = Settings(_env_file=None, _secrets_dir=None)  # type: ignore[call-arg]
-        assert s.neo4j_username == "best-practices-rag"
+        assert s.neo4j_username == "neo4j"
 
 
 def test_exa_api_key_required() -> None:

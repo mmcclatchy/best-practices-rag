@@ -9,12 +9,15 @@ _GLOBAL_ENV = _CONFIG_DIR / ".env"
 _SECRETS_DIR = _CONFIG_DIR / "secrets"
 
 
+EXA_NUM_RESULTS_DEFAULT = 5
+
+
 class Settings(BaseSettings):
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_username: str = "neo4j"
     neo4j_password: SecretStr
     exa_api_key: SecretStr
-    exa_content_top_n: int = 5
+    exa_num_results: int = EXA_NUM_RESULTS_DEFAULT
     exa_exclude_domains: list[str] = [
         "w3schools.com",
         "geeksforgeeks.org",

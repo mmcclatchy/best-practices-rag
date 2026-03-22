@@ -89,7 +89,6 @@ Run all three Bash calls simultaneously (parallel execution). Use `SEARCH_TECH` 
 best-practices-rag search-exa \
   --query "<PRIMARY_QUERY>" \
   --cutoff-date "<CUTOFF_DATE>" \
-  --num-results 10 \
   --output-file /tmp/bp_exa_primary.md
 ```
 
@@ -99,7 +98,6 @@ best-practices-rag search-exa \
 best-practices-rag search-exa \
   --query "<PRIMARY_QUERY> pitfalls gotchas production issues" \
   --cutoff-date "<CUTOFF_DATE>" \
-  --num-results 10 \
   --output-file /tmp/bp_exa_failures.md
 ```
 
@@ -110,7 +108,6 @@ best-practices-rag search-exa \
   --query "<TECH as space-separated names> <core topic from QUERY> recommended approach design decision rationale" \
   --category github \
   --cutoff-date "<CUTOFF_DATE>" \
-  --num-results 5 \
   --output-file /tmp/bp_exa_authority.md
 ```
 

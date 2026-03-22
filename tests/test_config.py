@@ -73,7 +73,7 @@ def test_preserved_fields_present() -> None:
     assert "neo4j_username" in Settings.model_fields
     assert "neo4j_password" in Settings.model_fields
     assert "exa_api_key" in Settings.model_fields
-    assert "exa_content_top_n" in Settings.model_fields
+    assert "exa_num_results" in Settings.model_fields
 
 
 def test_neo4j_username_default() -> None:
@@ -101,6 +101,33 @@ def test_exa_api_key_required(tmp_path: Path) -> None:
             Settings(_env_file=None, _secrets_dir=str(tmp_path / "empty"))  # type: ignore[call-arg]
         errors = exc_info.value.errors()
         assert any(e["loc"] == ("exa_api_key",) for e in errors)
+
+
+def test_exa_num_results_default() -> None:
+    with patch.dict(
+        "os.environ",
+        {
+            "NEO4J_PASSWORD": "test",
+            "EXA_API_KEY": "test",
+        },
+        clear=True,
+    ):
+        s = Settings()  # type: ignore[call-arg]
+        assert s.exa_num_results == 5
+
+
+def test_exa_num_results_from_env() -> None:
+    with patch.dict(
+        "os.environ",
+        {
+            "NEO4J_PASSWORD": "test",
+            "EXA_API_KEY": "test",
+            "EXA_NUM_RESULTS": "3",
+        },
+        clear=True,
+    ):
+        s = Settings()  # type: ignore[call-arg]
+        assert s.exa_num_results == 3
 
 
 def test_secrets_dir_in_model_config() -> None:

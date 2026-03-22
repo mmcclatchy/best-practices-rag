@@ -17,7 +17,7 @@ from neo4j import GraphDatabase
 from neo4j.exceptions import AuthError, ServiceUnavailable
 
 from best_practices_rag import __version__
-from best_practices_rag.config import get_settings
+from best_practices_rag.config import EXA_NUM_RESULTS_DEFAULT, get_settings
 from best_practices_rag.graph_store import GraphStore
 from best_practices_rag.knowledge_base import (
     query_knowledge_base,
@@ -897,6 +897,12 @@ def _format_exa_results_as_markdown(results: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def _resolve_exa_num_results(value: int | None) -> int:
+    if value is not None:
+        return value
+    return get_settings().exa_num_results
+
+
 @app.command()
 def search_exa(
     query: str = typer.Option(..., help="Search query string"),
@@ -906,8 +912,16 @@ def search_exa(
     cutoff_date: str | None = typer.Option(
         None, help="ISO date string for start_published_date filter (optional)"
     ),
-    num_results: int = typer.Option(10, help="Number of Exa results to request"),
-    top_n: int = typer.Option(5, help="Number of top results to return"),
+    num_results: int | None = typer.Option(
+        None,
+        callback=_resolve_exa_num_results,
+        help=f"Number of Exa results to request (default: EXA_NUM_RESULTS or {EXA_NUM_RESULTS_DEFAULT})",
+    ),
+    top_n: int | None = typer.Option(
+        None,
+        callback=_resolve_exa_num_results,
+        help=f"Number of top results to return (default: EXA_NUM_RESULTS or {EXA_NUM_RESULTS_DEFAULT})",
+    ),
     category: str | None = typer.Option(
         None, help="Exa category filter (e.g. github, blog, paper)"
     ),
@@ -932,6 +946,9 @@ def search_exa(
     """
     configure_skill_logging()
     log = logging.getLogger(__name__)
+    assert num_results is not None  # callback guarantees int
+    assert top_n is not None  # callback guarantees int
+
     log.debug(
         "search_exa invoked — query=%r exclude_domains=%r cutoff_date=%r num_results=%d top_n=%d category=%r output_file=%r",
         query,

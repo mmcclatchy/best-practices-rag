@@ -9,7 +9,7 @@ from best_practices_rag.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-_EXA_MAX_RESULTS: int = 10
+_EXA_MAX_RESULTS: int = 5
 
 
 class ExaResult(BaseModel):

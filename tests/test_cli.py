@@ -7,6 +7,7 @@ from neo4j.exceptions import AuthError, ServiceUnavailable
 from pytest_mock import MockerFixture
 
 from best_practices_rag.cli import _generate_slug
+from best_practices_rag.cli import _resolve_exa_num_results
 from best_practices_rag.cli import check
 from best_practices_rag.cli import main
 from best_practices_rag.cli import query_kb
@@ -537,3 +538,17 @@ def test_setup_without_exa_key_prints_instructions(
     out = capsys.readouterr().out
     assert "[action required]" in out
     assert "exa_api_key" in out
+
+
+def test_resolve_exa_num_results_returns_explicit_value() -> None:
+    assert _resolve_exa_num_results(7) == 7
+
+
+def test_resolve_exa_num_results_reads_settings_when_none(
+    mocker: MockerFixture,
+) -> None:
+    mock_settings = mocker.MagicMock()
+    mock_settings.exa_num_results = 3
+    mocker.patch("best_practices_rag.cli.get_settings", return_value=mock_settings)
+
+    assert _resolve_exa_num_results(None) == 3

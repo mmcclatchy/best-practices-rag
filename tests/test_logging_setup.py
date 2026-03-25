@@ -104,6 +104,29 @@ def test_creates_logs_directory(mocker: MockerFixture) -> None:
         root.handlers.extend(original_handlers)
 
 
+def test_configure_adds_file_handler_even_when_other_handler_present(
+    mocker: MockerFixture,
+) -> None:
+    root = logging.getLogger()
+    original_handlers = root.handlers[:]
+    try:
+        root.handlers.clear()
+        root.addHandler(
+            logging.StreamHandler()
+        )  # simulates a library pre-adding a handler
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "logs" / "skill.log"
+            mocker.patch("best_practices_rag.logging_setup._LOG_FILE", log_path)
+            configure_skill_logging()
+            assert any(
+                isinstance(h, logging.handlers.RotatingFileHandler)
+                for h in root.handlers
+            )
+    finally:
+        root.handlers.clear()
+        root.handlers.extend(original_handlers)
+
+
 def test_resolve_log_path_returns_dev_path_when_pyproject_present(
     mocker: MockerFixture, tmp_path: Path
 ) -> None:

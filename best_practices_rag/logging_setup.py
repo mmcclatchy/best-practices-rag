@@ -19,7 +19,11 @@ def configure_skill_logging() -> None:
     _LOG_FILE.parent.mkdir(exist_ok=True)
 
     root = logging.getLogger()
-    if root.handlers:
+    if any(
+        isinstance(h, logging.handlers.RotatingFileHandler)
+        and getattr(h, "baseFilename", None) == str(_LOG_FILE)
+        for h in root.handlers
+    ):
         return
 
     root.setLevel(logging.DEBUG)

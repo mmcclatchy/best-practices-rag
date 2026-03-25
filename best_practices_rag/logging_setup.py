@@ -18,15 +18,16 @@ _DATE_FMT = "%Y-%m-%d %H:%M:%S"
 def configure_skill_logging() -> None:
     _LOG_FILE.parent.mkdir(exist_ok=True)
 
-    root = logging.getLogger()
+    app = logging.getLogger("best_practices_rag")
     if any(
         isinstance(h, logging.handlers.RotatingFileHandler)
         and getattr(h, "baseFilename", None) == str(_LOG_FILE)
-        for h in root.handlers
+        for h in app.handlers
     ):
         return
 
-    root.setLevel(logging.DEBUG)
+    app.setLevel(logging.DEBUG)
+    app.propagate = False
 
     file_handler = logging.handlers.RotatingFileHandler(
         _LOG_FILE,
@@ -41,5 +42,5 @@ def configure_skill_logging() -> None:
     stderr_handler.setLevel(logging.WARNING)
     stderr_handler.setFormatter(logging.Formatter(_FMT, datefmt=_DATE_FMT))
 
-    root.addHandler(file_handler)
-    root.addHandler(stderr_handler)
+    app.addHandler(file_handler)
+    app.addHandler(stderr_handler)

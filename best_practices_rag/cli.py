@@ -976,7 +976,7 @@ def search_exa(
             Path(output_file).write_text("", encoding="utf-8")
             error_output["output_file"] = output_file
         print(json.dumps(error_output))
-        sys.exit(1)
+        sys.exit(0 if output_file else 1)
 
     top_results = [
         {

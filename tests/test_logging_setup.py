@@ -8,109 +8,120 @@ from pytest_mock import MockerFixture
 from best_practices_rag.logging_setup import _resolve_log_path, configure_skill_logging
 
 
+def _app_logger() -> logging.Logger:
+    return logging.getLogger("best_practices_rag")
+
+
+def _clear_app_logger() -> None:
+    app = _app_logger()
+    for h in app.handlers[:]:
+        h.close()
+        app.removeHandler(h)
+    app.propagate = True
+    app.setLevel(logging.NOTSET)
+
+
 def test_configure_adds_file_and_stderr_handlers(mocker: MockerFixture) -> None:
-    root = logging.getLogger()
-    original_handlers = root.handlers[:]
     try:
-        root.handlers.clear()
+        _clear_app_logger()
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / "logs" / "skill.log"
             mocker.patch("best_practices_rag.logging_setup._LOG_FILE", log_path)
             configure_skill_logging()
+            app = _app_logger()
             assert any(
                 isinstance(h, logging.handlers.RotatingFileHandler)
-                for h in root.handlers
+                for h in app.handlers
             )
             assert any(
                 isinstance(h, logging.StreamHandler)
                 and not isinstance(h, logging.FileHandler)
-                for h in root.handlers
+                for h in app.handlers
             )
     finally:
-        root.handlers.clear()
-        root.handlers.extend(original_handlers)
+        _clear_app_logger()
 
 
 def test_configure_is_idempotent(mocker: MockerFixture) -> None:
-    root = logging.getLogger()
-    original_handlers = root.handlers[:]
     try:
-        root.handlers.clear()
+        _clear_app_logger()
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / "logs" / "skill.log"
             mocker.patch("best_practices_rag.logging_setup._LOG_FILE", log_path)
             configure_skill_logging()
-            count_after_first = len(root.handlers)
+            count_after_first = len(_app_logger().handlers)
             configure_skill_logging()
-            assert len(root.handlers) == count_after_first
+            assert len(_app_logger().handlers) == count_after_first
     finally:
-        root.handlers.clear()
-        root.handlers.extend(original_handlers)
+        _clear_app_logger()
 
 
 def test_file_handler_level_is_debug(mocker: MockerFixture) -> None:
-    root = logging.getLogger()
-    original_handlers = root.handlers[:]
     try:
-        root.handlers.clear()
+        _clear_app_logger()
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / "logs" / "skill.log"
             mocker.patch("best_practices_rag.logging_setup._LOG_FILE", log_path)
             configure_skill_logging()
             file_handlers = [
                 h
-                for h in root.handlers
+                for h in _app_logger().handlers
                 if isinstance(h, logging.handlers.RotatingFileHandler)
             ]
             assert file_handlers[0].level == logging.DEBUG
     finally:
-        root.handlers.clear()
-        root.handlers.extend(original_handlers)
+        _clear_app_logger()
 
 
 def test_stderr_handler_level_is_warning(mocker: MockerFixture) -> None:
-    root = logging.getLogger()
-    original_handlers = root.handlers[:]
     try:
-        root.handlers.clear()
+        _clear_app_logger()
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / "logs" / "skill.log"
             mocker.patch("best_practices_rag.logging_setup._LOG_FILE", log_path)
             configure_skill_logging()
             stderr_handlers = [
                 h
-                for h in root.handlers
+                for h in _app_logger().handlers
                 if isinstance(h, logging.StreamHandler)
                 and not isinstance(h, logging.FileHandler)
             ]
             assert stderr_handlers[0].level == logging.WARNING
     finally:
-        root.handlers.clear()
-        root.handlers.extend(original_handlers)
+        _clear_app_logger()
 
 
 def test_creates_logs_directory(mocker: MockerFixture) -> None:
-    root = logging.getLogger()
-    original_handlers = root.handlers[:]
     try:
-        root.handlers.clear()
+        _clear_app_logger()
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / "logs" / "skill.log"
             mocker.patch("best_practices_rag.logging_setup._LOG_FILE", log_path)
             configure_skill_logging()
             assert log_path.parent.exists()
     finally:
-        root.handlers.clear()
-        root.handlers.extend(original_handlers)
+        _clear_app_logger()
 
 
-def test_configure_adds_file_handler_even_when_other_handler_present(
+def test_propagate_is_disabled(mocker: MockerFixture) -> None:
+    try:
+        _clear_app_logger()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "logs" / "skill.log"
+            mocker.patch("best_practices_rag.logging_setup._LOG_FILE", log_path)
+            configure_skill_logging()
+            assert _app_logger().propagate is False
+    finally:
+        _clear_app_logger()
+
+
+def test_configure_adds_file_handler_even_when_root_has_other_handler(
     mocker: MockerFixture,
 ) -> None:
     root = logging.getLogger()
-    original_handlers = root.handlers[:]
+    original_root_handlers = root.handlers[:]
     try:
-        root.handlers.clear()
+        _clear_app_logger()
         root.addHandler(
             logging.StreamHandler()
         )  # simulates a library pre-adding a handler
@@ -120,11 +131,12 @@ def test_configure_adds_file_handler_even_when_other_handler_present(
             configure_skill_logging()
             assert any(
                 isinstance(h, logging.handlers.RotatingFileHandler)
-                for h in root.handlers
+                for h in _app_logger().handlers
             )
     finally:
+        _clear_app_logger()
         root.handlers.clear()
-        root.handlers.extend(original_handlers)
+        root.handlers.extend(original_root_handlers)
 
 
 def test_resolve_log_path_returns_dev_path_when_pyproject_present(
@@ -142,7 +154,6 @@ def test_resolve_log_path_returns_dev_path_when_pyproject_present(
 def test_resolve_log_path_returns_prod_path_when_no_pyproject(
     mocker: MockerFixture, tmp_path: Path
 ) -> None:
-    # tmp_path has no pyproject.toml
     mocker.patch("best_practices_rag.logging_setup.Path.cwd", return_value=tmp_path)
 
     result = _resolve_log_path()

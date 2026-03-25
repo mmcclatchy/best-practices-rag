@@ -606,7 +606,7 @@ def test_search_exa_error_writes_empty_file_when_output_file_given(
             output_file=output_file,
         )
 
-    assert exc_info.value.code == 1
+    assert exc_info.value.code == 0
     assert Path(output_file).exists()
     assert Path(output_file).read_text() == ""
     out = capsys.readouterr().out

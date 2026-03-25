@@ -3,7 +3,14 @@ import logging.handlers
 from pathlib import Path
 
 
-_LOG_FILE = Path.cwd() / "logs" / "skill.log"
+def _resolve_log_path() -> Path:
+    local_marker = Path.cwd() / "pyproject.toml"
+    if local_marker.exists() and "best-practices-rag" in local_marker.read_text()[:200]:
+        return Path.cwd() / "logs" / "skill.log"
+    return Path.home() / ".config" / "best-practices-rag" / "logs" / "skill.log"
+
+
+_LOG_FILE = _resolve_log_path()
 _FMT = "%(asctime)s %(levelname)-8s %(name)s: %(message)s"
 _DATE_FMT = "%Y-%m-%d %H:%M:%S"
 

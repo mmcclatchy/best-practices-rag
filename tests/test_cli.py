@@ -9,12 +9,15 @@ from pytest_mock import MockerFixture
 from best_practices_rag.cli import _generate_slug
 from best_practices_rag.cli import _resolve_exa_num_results
 from best_practices_rag.cli import check
+from best_practices_rag.cli import logs
 from best_practices_rag.cli import main
 from best_practices_rag.cli import query_kb
+from best_practices_rag.cli import search_exa
 from best_practices_rag.cli import setup
 from best_practices_rag.cli import setup_schema
 from best_practices_rag.cli import update
 from best_practices_rag.cli import version
+from best_practices_rag.search import ExaSearchError
 
 
 class TestGenerateSlug:
@@ -552,3 +555,104 @@ def test_resolve_exa_num_results_reads_settings_when_none(
     mocker.patch("best_practices_rag.cli.get_settings", return_value=mock_settings)
 
     assert _resolve_exa_num_results(None) == 3
+
+
+def test_search_exa_error_outputs_json_and_exits(
+    mocker: MockerFixture, capsys: pytest.CaptureFixture[str]
+) -> None:
+    mocker.patch("best_practices_rag.cli.configure_skill_logging")
+    mocker.patch(
+        "best_practices_rag.cli.search_best_practices",
+        side_effect=ExaSearchError("Exa search failed — rate limited (429)"),
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        search_exa(
+            query="FastAPI async patterns",
+            exclude_domains=None,
+            cutoff_date=None,
+            num_results=5,
+            top_n=5,
+            category=None,
+            output_file=None,
+        )
+
+    assert exc_info.value.code == 1
+    out = capsys.readouterr().out
+    parsed = json.loads(out)
+    assert parsed["count"] == 0
+    assert parsed["results"] == []
+    assert "rate limited" in parsed["error"]
+
+
+def test_search_exa_error_writes_empty_file_when_output_file_given(
+    mocker: MockerFixture, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    mocker.patch("best_practices_rag.cli.configure_skill_logging")
+    mocker.patch(
+        "best_practices_rag.cli.search_best_practices",
+        side_effect=ExaSearchError("Exa search failed"),
+    )
+    output_file = str(tmp_path / "out.md")
+
+    with pytest.raises(SystemExit) as exc_info:
+        search_exa(
+            query="test query",
+            exclude_domains=None,
+            cutoff_date=None,
+            num_results=5,
+            top_n=5,
+            category=None,
+            output_file=output_file,
+        )
+
+    assert exc_info.value.code == 1
+    assert Path(output_file).exists()
+    assert Path(output_file).read_text() == ""
+    out = capsys.readouterr().out
+    parsed = json.loads(out)
+    assert parsed["output_file"] == output_file
+
+
+def test_logs_command_exits_when_no_log_file(
+    mocker: MockerFixture, tmp_path: Path
+) -> None:
+    mocker.patch(
+        "best_practices_rag.cli._resolve_log_path",
+        return_value=tmp_path / "nonexistent" / "skill.log",
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        logs(lines=50, follow=False)
+
+    assert exc_info.value.code == 1
+
+
+def test_logs_command_calls_tail(mocker: MockerFixture, tmp_path: Path) -> None:
+    log_file = tmp_path / "skill.log"
+    log_file.write_text("log entry\n")
+    mocker.patch(
+        "best_practices_rag.cli._resolve_log_path",
+        return_value=log_file,
+    )
+    mock_run = mocker.patch("best_practices_rag.cli.subprocess.run")
+
+    logs(lines=20, follow=False)
+
+    mock_run.assert_called_once_with(["tail", "-20", str(log_file)])
+
+
+def test_logs_command_follow_calls_tail_f(
+    mocker: MockerFixture, tmp_path: Path
+) -> None:
+    log_file = tmp_path / "skill.log"
+    log_file.write_text("log entry\n")
+    mocker.patch(
+        "best_practices_rag.cli._resolve_log_path",
+        return_value=log_file,
+    )
+    mock_run = mocker.patch("best_practices_rag.cli.subprocess.run")
+
+    logs(lines=50, follow=True)
+
+    mock_run.assert_called_once_with(["tail", "-f", str(log_file)])

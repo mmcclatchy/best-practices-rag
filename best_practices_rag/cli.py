@@ -24,9 +24,9 @@ from best_practices_rag.knowledge_base import (
     query_knowledge_base,
     summarize_neo4j_results,
 )
-from best_practices_rag.logging_setup import configure_skill_logging
+from best_practices_rag.logging_setup import configure_skill_logging, _resolve_log_path
 from best_practices_rag.parser import build_synthesized_bundle
-from best_practices_rag.search import search_best_practices
+from best_practices_rag.search import ExaSearchError, search_best_practices
 from best_practices_rag.setup_schema import run_migrations
 from best_practices_rag.staleness import (
     check_staleness,
@@ -961,13 +961,22 @@ def search_exa(
         else None
     )
 
-    results = search_best_practices(
-        query=query,
-        num_results=num_results,
-        exclude_domains=domains,
-        start_published_date=cutoff_date,
-        category=category,
-    )
+    try:
+        results = search_best_practices(
+            query=query,
+            num_results=num_results,
+            exclude_domains=domains,
+            start_published_date=cutoff_date,
+            category=category,
+        )
+    except ExaSearchError as exc:
+        log.error("Exa search failed: %s", exc)
+        error_output: dict[str, Any] = {"count": 0, "results": [], "error": str(exc)}
+        if output_file:
+            Path(output_file).write_text("", encoding="utf-8")
+            error_output["output_file"] = output_file
+        print(json.dumps(error_output))
+        sys.exit(1)
 
     top_results = [
         {
@@ -1292,6 +1301,29 @@ def update() -> None:
     print("  uv tool upgrade best-practices-rag", file=sys.stderr)
     print("  pipx upgrade best-practices-rag", file=sys.stderr)
     sys.exit(1)
+
+
+@app.command()
+def logs(
+    lines: int = typer.Option(50, help="Number of lines to show"),
+    follow: bool = typer.Option(False, "--follow", "-f", help="Follow log output"),
+) -> None:
+    """Show recent log entries from the skill log file.
+
+    \b
+    Example:
+        best-practices-rag logs
+        best-practices-rag logs --lines 100
+        best-practices-rag logs --follow
+    """
+    log_file = _resolve_log_path()
+    if not log_file.exists():
+        print(f"No log file found at {log_file}")
+        sys.exit(1)
+    if follow:
+        subprocess.run(["tail", "-f", str(log_file)])
+    else:
+        subprocess.run(["tail", f"-{lines}", str(log_file)])
 
 
 def main() -> None:

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from pytest_mock import MockerFixture
 
-from best_practices_rag.logging_setup import configure_skill_logging
+from best_practices_rag.logging_setup import _resolve_log_path, configure_skill_logging
 
 
 def test_configure_adds_file_and_stderr_handlers(mocker: MockerFixture) -> None:
@@ -102,3 +102,42 @@ def test_creates_logs_directory(mocker: MockerFixture) -> None:
     finally:
         root.handlers.clear()
         root.handlers.extend(original_handlers)
+
+
+def test_resolve_log_path_returns_dev_path_when_pyproject_present(
+    mocker: MockerFixture, tmp_path: Path
+) -> None:
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text('[project]\nname = "best-practices-rag"\n')
+    mocker.patch("best_practices_rag.logging_setup.Path.cwd", return_value=tmp_path)
+
+    result = _resolve_log_path()
+
+    assert result == tmp_path / "logs" / "skill.log"
+
+
+def test_resolve_log_path_returns_prod_path_when_no_pyproject(
+    mocker: MockerFixture, tmp_path: Path
+) -> None:
+    # tmp_path has no pyproject.toml
+    mocker.patch("best_practices_rag.logging_setup.Path.cwd", return_value=tmp_path)
+
+    result = _resolve_log_path()
+
+    assert (
+        result == Path.home() / ".config" / "best-practices-rag" / "logs" / "skill.log"
+    )
+
+
+def test_resolve_log_path_returns_prod_path_when_pyproject_is_different_project(
+    mocker: MockerFixture, tmp_path: Path
+) -> None:
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text('[project]\nname = "some-other-project"\n')
+    mocker.patch("best_practices_rag.logging_setup.Path.cwd", return_value=tmp_path)
+
+    result = _resolve_log_path()
+
+    assert (
+        result == Path.home() / ".config" / "best-practices-rag" / "logs" / "skill.log"
+    )

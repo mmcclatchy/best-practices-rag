@@ -25,6 +25,7 @@ class Settings(BaseSettings):
         "medium.com",
     ]
     exa_min_published_year_offset: int = 2
+    exa_min_score: float = 0.0
 
     model_config = SettingsConfigDict(
         env_file=str(_GLOBAL_ENV),

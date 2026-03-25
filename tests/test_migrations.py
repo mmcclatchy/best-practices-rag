@@ -1,5 +1,4 @@
 from pathlib import Path
-from unittest.mock import MagicMock
 
 from pytest_mock import MockerFixture
 
@@ -8,12 +7,12 @@ from best_practices_rag.setup_schema import run_migrations
 
 def test_main_runs_migrations(mocker: MockerFixture) -> None:
     mock_executor_cls = mocker.patch("best_practices_rag.setup_schema.Executor")
-    mock_executor = MagicMock()
+    mock_executor = mocker.MagicMock()
     mock_executor_cls.return_value = mock_executor
     mock_executor.migrate.return_value = None
 
     mocker.patch(
-        "best_practices_rag.setup_schema.get_settings", return_value=MagicMock()
+        "best_practices_rag.setup_schema.get_settings", return_value=mocker.MagicMock()
     )
     mock_driver = mocker.patch("best_practices_rag.setup_schema.GraphDatabase.driver")
     mock_driver.return_value.execute_query.return_value = ([{"cnt": 0}], None, None)

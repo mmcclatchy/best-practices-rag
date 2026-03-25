@@ -1,6 +1,6 @@
-import pytest
-from unittest.mock import MagicMock
+from typing import Any
 
+import pytest
 from pytest_mock import MockerFixture
 
 from best_practices_rag.knowledge_base import (
@@ -9,7 +9,7 @@ from best_practices_rag.knowledge_base import (
 )
 
 
-def _make_graph_store(mocker: MockerFixture, rows: list[dict]) -> MagicMock:
+def _make_graph_store(mocker: MockerFixture, rows: list[dict]) -> Any:
     gs = mocker.MagicMock()
     gs.structured_query.return_value = rows
     return gs

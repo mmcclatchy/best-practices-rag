@@ -68,7 +68,7 @@ def search_best_practices(
     except Exception as exc:
         if "429" in str(exc):
             raise ExaSearchError("Exa search failed — rate limited (429)")
-        raise ExaSearchError("Exa search failed") from None
+        raise ExaSearchError("Exa search failed") from exc
 
     raw_results = response.results
     if not raw_results:
@@ -76,6 +76,11 @@ def search_best_practices(
         return []
 
     logger.info("Exa search complete — %d results returned", len(raw_results))
+
+    min_score = settings.exa_min_score
+    if min_score > 0.0:
+        raw_results = [r for r in raw_results if r.score is not None and r.score >= min_score]
+        logger.info("Score filter applied (>= %.2f) — %d results kept", min_score, len(raw_results))
 
     exa_results = []
     for r in raw_results:

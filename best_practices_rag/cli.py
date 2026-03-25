@@ -14,7 +14,8 @@ from typing import Any
 
 import typer
 from neo4j import GraphDatabase
-from neo4j.exceptions import AuthError, ServiceUnavailable
+from neo4j.exceptions import AuthError, ClientError, ServiceUnavailable
+from pydantic import ValidationError
 
 from best_practices_rag import __version__
 from best_practices_rag.config import EXA_NUM_RESULTS_DEFAULT, get_settings
@@ -33,9 +34,6 @@ from best_practices_rag.staleness import (
     load_tech_info,
 )
 from best_practices_rag.storage import store_results
-
-
-from pydantic import ValidationError
 
 
 app = typer.Typer(
@@ -505,37 +503,35 @@ def check() -> None:
         )
         driver.verify_connectivity()
         print("  [pass] Neo4j connection")
-    except Exception as e:
+        expected_indexes = [
+            "bp_fulltext",
+            "constraint_best_practice_id",
+            "constraint_technology_id",
+            "constraint_pattern_id",
+            "index_best_practice_name",
+            "index_best_practice_category",
+            "index_technology_name",
+        ]
+        records, _, _ = driver.execute_query(
+            "SHOW INDEXES YIELD name RETURN collect(name) AS names",
+            database_="neo4j",
+        )
+        existing: set[str] = set(records[0]["names"]) if records else set()
+        missing: list[str] = [idx for idx in expected_indexes if idx not in existing]
+        if missing:
+            print(f"  [FAIL] Schema — missing indexes: {', '.join(missing)}")
+            print("    Run: best-practices-rag setup-schema")
+            all_ok = False
+        else:
+            print("  [pass] Schema indexes")
+    except (ServiceUnavailable, AuthError) as e:
         print(f"  [FAIL] Neo4j connection — {e}")
         all_ok = False
-
-    if driver:
-        try:
-            expected_indexes = [
-                "bp_fulltext",
-                "constraint_best_practice_id",
-                "constraint_technology_id",
-                "constraint_pattern_id",
-                "index_best_practice_name",
-                "index_best_practice_category",
-                "index_technology_name",
-            ]
-            records, _, _ = driver.execute_query(
-                "SHOW INDEXES YIELD name RETURN collect(name) AS names",
-                database_="neo4j",
-            )
-            existing = set(records[0]["names"]) if records else set()
-            missing = [idx for idx in expected_indexes if idx not in existing]
-            if missing:
-                print(f"  [FAIL] Schema — missing indexes: {', '.join(missing)}")
-                print("    Run: best-practices-rag setup-schema")
-                all_ok = False
-            else:
-                print("  [pass] Schema indexes")
-        except Exception as e:
-            print(f"  [FAIL] Schema check — {e}")
-            all_ok = False
-        finally:
+    except ClientError as e:
+        print(f"  [FAIL] Schema check — {e}")
+        all_ok = False
+    finally:
+        if driver:
             driver.close()
 
     key = settings.exa_api_key.get_secret_value()
@@ -805,22 +801,21 @@ def query_kb(
 
     try:
         settings = get_settings()
-        graph_store = GraphStore(
+        with GraphStore(
             uri=settings.neo4j_uri,
             username=settings.neo4j_username,
             password=settings.neo4j_password.get_secret_value(),
-        )
+        ) as graph_store:
+            current_versions = load_current_versions(_find_references_dir())
 
-        current_versions = load_current_versions(_find_references_dir())
-
-        query = " ".join(tech_names + topic_keywords)
-        results = query_knowledge_base(
-            query=query,
-            graph_store=graph_store,
-            tech_names=tech_names,
-            topic_keywords=topic_keywords,
-            lang_names=lang_names,
-        )
+            query = " ".join(tech_names + topic_keywords)
+            results = query_knowledge_base(
+                query=query,
+                graph_store=graph_store,
+                tech_names=tech_names,
+                topic_keywords=topic_keywords,
+                lang_names=lang_names,
+            )
     except (AuthError, ServiceUnavailable) as exc:
         log.error("Neo4j connection failed: %s", exc)
         output = {
@@ -1082,13 +1077,12 @@ def store_result(
 
     try:
         settings = get_settings()
-        graph_store = GraphStore(
+        with GraphStore(
             uri=settings.neo4j_uri,
             username=settings.neo4j_username,
             password=settings.neo4j_password.get_secret_value(),
-        )
-
-        nodes_count = store_results(bundle, graph_store)
+        ) as graph_store:
+            nodes_count = store_results(bundle, graph_store)
     except (AuthError, ServiceUnavailable) as exc:
         log.error("Neo4j connection failed: %s", exc)
         output = {"stored": False, "error": f"neo4j_unavailable: {exc}"}

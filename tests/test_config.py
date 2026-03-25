@@ -1,11 +1,11 @@
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 from pydantic import ValidationError
+from pytest_mock import MockerFixture
 
-from best_practices_rag.config import Settings
 import best_practices_rag.config as config_module
+from best_practices_rag.config import Settings
 
 
 def test_inference_fields_absent() -> None:
@@ -23,49 +23,49 @@ def test_exa_filter_fields_present() -> None:
     assert "exa_min_published_year_offset" in Settings.model_fields
 
 
-def test_exa_exclude_domains_default() -> None:
-    with patch.dict(
+def test_exa_exclude_domains_default(mocker: MockerFixture) -> None:
+    mocker.patch.dict(
         "os.environ",
         {
             "NEO4J_PASSWORD": "test",
             "EXA_API_KEY": "test",
         },
         clear=True,
-    ):
-        s = Settings()  # type: ignore[call-arg]
-        assert isinstance(s.exa_exclude_domains, list)
-        assert "w3schools.com" in s.exa_exclude_domains
-        assert "geeksforgeeks.org" in s.exa_exclude_domains
-        assert "tutorialspoint.com" in s.exa_exclude_domains
-        assert "medium.com" in s.exa_exclude_domains
+    )
+    s = Settings()  # type: ignore[call-arg]
+    assert isinstance(s.exa_exclude_domains, list)
+    assert "w3schools.com" in s.exa_exclude_domains
+    assert "geeksforgeeks.org" in s.exa_exclude_domains
+    assert "tutorialspoint.com" in s.exa_exclude_domains
+    assert "medium.com" in s.exa_exclude_domains
 
 
-def test_exa_min_published_year_offset_default() -> None:
-    with patch.dict(
+def test_exa_min_published_year_offset_default(mocker: MockerFixture) -> None:
+    mocker.patch.dict(
         "os.environ",
         {
             "NEO4J_PASSWORD": "test",
             "EXA_API_KEY": "test",
         },
         clear=True,
-    ):
-        s = Settings()  # type: ignore[call-arg]
-        assert s.exa_min_published_year_offset == 2
+    )
+    s = Settings()  # type: ignore[call-arg]
+    assert s.exa_min_published_year_offset == 2
 
 
-def test_get_settings_singleton() -> None:
+def test_get_settings_singleton(mocker: MockerFixture) -> None:
     config_module._settings = None
-    with patch.dict(
+    mocker.patch.dict(
         "os.environ",
         {
             "NEO4J_PASSWORD": "test",
             "EXA_API_KEY": "test",
         },
         clear=True,
-    ):
-        s1 = config_module.get_settings()
-        s2 = config_module.get_settings()
-        assert s1 is s2
+    )
+    s1 = config_module.get_settings()
+    s2 = config_module.get_settings()
+    assert s1 is s2
 
 
 def test_preserved_fields_present() -> None:
@@ -76,48 +76,48 @@ def test_preserved_fields_present() -> None:
     assert "exa_num_results" in Settings.model_fields
 
 
-def test_neo4j_username_default() -> None:
-    with patch.dict(
+def test_neo4j_username_default(mocker: MockerFixture) -> None:
+    mocker.patch.dict(
         "os.environ",
         {
             "NEO4J_PASSWORD": "test",
             "EXA_API_KEY": "test",
         },
         clear=True,
-    ):
-        s = Settings(_env_file=None, _secrets_dir=None)  # type: ignore[call-arg]
-        assert s.neo4j_username == "neo4j"
+    )
+    s = Settings(_env_file=None, _secrets_dir=None)  # type: ignore[call-arg]
+    assert s.neo4j_username == "neo4j"
 
 
-def test_exa_api_key_required(tmp_path: Path) -> None:
-    with patch.dict(
+def test_exa_api_key_required(mocker: MockerFixture, tmp_path: Path) -> None:
+    mocker.patch.dict(
         "os.environ",
         {
             "NEO4J_PASSWORD": "test",
         },
         clear=True,
-    ):
-        with pytest.raises(ValidationError) as exc_info:
-            Settings(_env_file=None, _secrets_dir=str(tmp_path / "empty"))  # type: ignore[call-arg]
-        errors = exc_info.value.errors()
-        assert any(e["loc"] == ("exa_api_key",) for e in errors)
+    )
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(_env_file=None, _secrets_dir=str(tmp_path / "empty"))  # type: ignore[call-arg]
+    errors = exc_info.value.errors()
+    assert any(e["loc"] == ("exa_api_key",) for e in errors)
 
 
-def test_exa_num_results_default() -> None:
-    with patch.dict(
+def test_exa_num_results_default(mocker: MockerFixture) -> None:
+    mocker.patch.dict(
         "os.environ",
         {
             "NEO4J_PASSWORD": "test",
             "EXA_API_KEY": "test",
         },
         clear=True,
-    ):
-        s = Settings()  # type: ignore[call-arg]
-        assert s.exa_num_results == 5
+    )
+    s = Settings()  # type: ignore[call-arg]
+    assert s.exa_num_results == 5
 
 
-def test_exa_num_results_from_env() -> None:
-    with patch.dict(
+def test_exa_num_results_from_env(mocker: MockerFixture) -> None:
+    mocker.patch.dict(
         "os.environ",
         {
             "NEO4J_PASSWORD": "test",
@@ -125,9 +125,22 @@ def test_exa_num_results_from_env() -> None:
             "EXA_NUM_RESULTS": "3",
         },
         clear=True,
-    ):
-        s = Settings()  # type: ignore[call-arg]
-        assert s.exa_num_results == 3
+    )
+    s = Settings()  # type: ignore[call-arg]
+    assert s.exa_num_results == 3
+
+
+def test_exa_min_score_default(mocker: MockerFixture) -> None:
+    mocker.patch.dict(
+        "os.environ",
+        {
+            "NEO4J_PASSWORD": "test",
+            "EXA_API_KEY": "test",
+        },
+        clear=True,
+    )
+    s = Settings()  # type: ignore[call-arg]
+    assert s.exa_min_score == 0.0
 
 
 def test_secrets_dir_in_model_config() -> None:

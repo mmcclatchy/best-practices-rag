@@ -20,3 +20,9 @@ class GraphStore:
 
     def close(self) -> None:
         self._driver.close()
+
+    def __enter__(self) -> "GraphStore":
+        return self
+
+    def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
+        self.close()

@@ -16,7 +16,6 @@ from datetime import datetime, timezone
 from pydantic import BaseModel
 
 from best_practices_rag.graph_models import EntityNode, Relation
-
 from best_practices_rag.search import ExaResult
 
 

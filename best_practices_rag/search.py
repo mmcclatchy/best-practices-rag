@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Any
 
 from exa_py import Exa
@@ -63,12 +64,27 @@ def search_best_practices(
     if category is not None:
         search_kwargs["category"] = category
 
-    try:
-        response = exa.search(query, **search_kwargs)
-    except Exception as exc:
-        if "429" in str(exc):
-            raise ExaSearchError("Exa search failed — rate limited (429)")
-        raise ExaSearchError("Exa search failed") from exc
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = exa.search(query, **search_kwargs)
+            break
+        except Exception as exc:
+            err_str = str(exc)
+            is_retryable = "429" in err_str or "401" in err_str
+            if is_retryable and attempt < max_retries - 1:
+                wait = 2**attempt
+                logger.warning(
+                    "Exa search attempt %d failed (%s), retrying in %ds",
+                    attempt + 1,
+                    err_str[:80],
+                    wait,
+                )
+                time.sleep(wait)
+                continue
+            if "429" in err_str:
+                raise ExaSearchError("Exa search failed — rate limited (429)")
+            raise ExaSearchError("Exa search failed") from exc
 
     raw_results = response.results
     if not raw_results:
@@ -79,8 +95,14 @@ def search_best_practices(
 
     min_score = settings.exa_min_score
     if min_score > 0.0:
-        raw_results = [r for r in raw_results if r.score is not None and r.score >= min_score]
-        logger.info("Score filter applied (>= %.2f) — %d results kept", min_score, len(raw_results))
+        raw_results = [
+            r for r in raw_results if r.score is not None and r.score >= min_score
+        ]
+        logger.info(
+            "Score filter applied (>= %.2f) — %d results kept",
+            min_score,
+            len(raw_results),
+        )
 
     exa_results = []
     for r in raw_results:

@@ -167,6 +167,7 @@ def test_search_raises_on_rate_limit(mocker: MockerFixture) -> None:
     mock_exa_instance = mocker.MagicMock()
     mock_exa_instance.search.side_effect = Exception("HTTP 429 Too Many Requests")
     mocker.patch("best_practices_rag.search.Exa", return_value=mock_exa_instance)
+    mocker.patch("best_practices_rag.search.time.sleep")
 
     settings = mocker.MagicMock()
     settings.exa_api_key.get_secret_value.return_value = "test_key"
@@ -328,3 +329,69 @@ def test_search_filters_results_with_none_score(mocker: MockerFixture) -> None:
 
     assert len(results) == 1
     assert results[0].url == "https://a.com"
+
+
+def test_search_retries_on_401_then_succeeds(mocker: MockerFixture) -> None:
+    mock_result = _make_mock_result(mocker)
+    mock_response = _make_mock_exa_response(mocker, [mock_result])
+    mock_exa_instance = mocker.MagicMock()
+    mock_exa_instance.search.side_effect = [
+        Exception("HTTP 401 Invalid API key"),
+        mock_response,
+    ]
+    mocker.patch("best_practices_rag.search.Exa", return_value=mock_exa_instance)
+    mock_sleep = mocker.patch("best_practices_rag.search.time.sleep")
+
+    settings = mocker.MagicMock()
+    settings.exa_api_key.get_secret_value.return_value = "test_key"
+    settings.exa_exclude_domains = []
+    settings.exa_min_score = 0.0
+    mocker.patch("best_practices_rag.search.get_settings", return_value=settings)
+
+    results = search_best_practices("query")
+
+    assert len(results) == 1
+    mock_sleep.assert_called_once_with(1)
+
+
+def test_search_retries_on_429_then_succeeds(mocker: MockerFixture) -> None:
+    mock_result = _make_mock_result(mocker)
+    mock_response = _make_mock_exa_response(mocker, [mock_result])
+    mock_exa_instance = mocker.MagicMock()
+    mock_exa_instance.search.side_effect = [
+        Exception("HTTP 429 Too Many Requests"),
+        mock_response,
+    ]
+    mocker.patch("best_practices_rag.search.Exa", return_value=mock_exa_instance)
+    mock_sleep = mocker.patch("best_practices_rag.search.time.sleep")
+
+    settings = mocker.MagicMock()
+    settings.exa_api_key.get_secret_value.return_value = "test_key"
+    settings.exa_exclude_domains = []
+    settings.exa_min_score = 0.0
+    mocker.patch("best_practices_rag.search.get_settings", return_value=settings)
+
+    results = search_best_practices("query")
+
+    assert len(results) == 1
+    mock_sleep.assert_called_once_with(1)
+
+
+def test_search_exhausts_retries_on_401(mocker: MockerFixture) -> None:
+    mock_exa_instance = mocker.MagicMock()
+    mock_exa_instance.search.side_effect = Exception("HTTP 401 Invalid API key")
+    mocker.patch("best_practices_rag.search.Exa", return_value=mock_exa_instance)
+    mock_sleep = mocker.patch("best_practices_rag.search.time.sleep")
+
+    settings = mocker.MagicMock()
+    settings.exa_api_key.get_secret_value.return_value = "test_key"
+    settings.exa_exclude_domains = []
+    settings.exa_min_score = 0.0
+    mocker.patch("best_practices_rag.search.get_settings", return_value=settings)
+
+    with pytest.raises(ExaSearchError, match="Exa search failed"):
+        search_best_practices("query")
+
+    assert mock_sleep.call_count == 2
+    mock_sleep.assert_any_call(1)
+    mock_sleep.assert_any_call(2)

@@ -54,7 +54,9 @@ class TestCommandSpec:
 
 
 class TestClaudeCodeAdapter:
-    def test_install_root(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_install_root(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         adapter = ClaudeCodeAdapter()
         assert adapter.install_root() == tmp_path / ".claude"
@@ -63,7 +65,9 @@ class TestClaudeCodeAdapter:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         assert ClaudeCodeAdapter().agents_dir() == tmp_path / ".claude" / "agents"
 
-    def test_commands_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_commands_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         assert ClaudeCodeAdapter().commands_dir() == tmp_path / ".claude" / "commands"
 
@@ -103,13 +107,25 @@ class TestClaudeCodeAdapter:
         assert "color:" not in result
 
     def test_render_command_body_passthrough(self) -> None:
-        spec = CommandSpec(name="bp", description="Search", body="# Title\n\nbody content")
+        spec = CommandSpec(
+            name="bp", description="Search", body="# Title\n\nbody content"
+        )
         assert ClaudeCodeAdapter().render_command(spec) == spec.body
 
-    def test_write_all_creates_files(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_write_all_creates_files(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         adapter = ClaudeCodeAdapter()
-        agents = [AgentSpec(name="bp-pipeline", description="d", model="sonnet", tools=[], body="body")]
+        agents = [
+            AgentSpec(
+                name="bp-pipeline",
+                description="d",
+                model="sonnet",
+                tools=[],
+                body="body",
+            )
+        ]
         commands = [CommandSpec(name="bp", description="Search", body="bp body")]
 
         written = adapter.write_all(agents, commands)
@@ -118,10 +134,20 @@ class TestClaudeCodeAdapter:
         assert (tmp_path / ".claude" / "commands" / "bp.md").exists()
         assert len(written) == 2
 
-    def test_write_all_agent_has_frontmatter(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_write_all_agent_has_frontmatter(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         adapter = ClaudeCodeAdapter()
-        agents = [AgentSpec(name="agent", description="desc", model="sonnet", tools=["Bash"], body="body")]
+        agents = [
+            AgentSpec(
+                name="agent",
+                description="desc",
+                model="sonnet",
+                tools=["Bash"],
+                body="body",
+            )
+        ]
         adapter.write_all(agents, [])
 
         content = (tmp_path / ".claude" / "agents" / "agent.md").read_text()
@@ -130,7 +156,11 @@ class TestClaudeCodeAdapter:
 
     def test_installed_file_relpaths(self) -> None:
         adapter = ClaudeCodeAdapter()
-        agents = [AgentSpec(name="bp-pipeline", description="d", model="sonnet", tools=[], body="b")]
+        agents = [
+            AgentSpec(
+                name="bp-pipeline", description="d", model="sonnet", tools=[], body="b"
+            )
+        ]
         commands = [CommandSpec(name="bp", description="d", body="b")]
         relpaths = adapter.installed_file_relpaths(agents, commands)
         assert "agents/bp-pipeline.md" in relpaths
@@ -143,7 +173,9 @@ class TestClaudeCodeAdapter:
 
 
 class TestOpenCodeAdapter:
-    def test_install_root(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_install_root(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         assert OpenCodeAdapter().install_root() == tmp_path / ".config" / "opencode"
 
@@ -157,7 +189,9 @@ class TestOpenCodeAdapter:
         assert OpenCodeAdapter().model_name("unknown") == "anthropic/claude-unknown"
 
     def test_render_agent_body_only(self) -> None:
-        spec = AgentSpec(name="x", description="d", model="sonnet", tools=[], body="# Title\nContent")
+        spec = AgentSpec(
+            name="x", description="d", model="sonnet", tools=[], body="# Title\nContent"
+        )
         assert OpenCodeAdapter().render_agent(spec) == "# Title\nContent"
 
     def test_render_command_body_only(self) -> None:
@@ -170,7 +204,13 @@ class TestOpenCodeAdapter:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         adapter = OpenCodeAdapter()
         agents = [
-            AgentSpec(name="bp-pipeline", description="Pipeline", model="sonnet", tools=["Bash", "Read"], body="body")
+            AgentSpec(
+                name="bp-pipeline",
+                description="Pipeline",
+                model="sonnet",
+                tools=["Bash", "Read"],
+                body="body",
+            )
         ]
         commands = [CommandSpec(name="bp", description="Search", body="cmd body")]
 
@@ -189,7 +229,15 @@ class TestOpenCodeAdapter:
     ) -> None:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         adapter = OpenCodeAdapter()
-        agents = [AgentSpec(name="bp-pipeline", description="Pipeline", model="sonnet", tools=["Bash"], body="b")]
+        agents = [
+            AgentSpec(
+                name="bp-pipeline",
+                description="Pipeline",
+                model="sonnet",
+                tools=["Bash"],
+                body="b",
+            )
+        ]
         commands = [CommandSpec(name="bp", description="Search", body="c")]
         adapter.write_all(agents, commands)
 
@@ -217,14 +265,20 @@ class TestOpenCodeAdapter:
         opencode_dir.mkdir(parents=True)
         existing = {
             "$schema": "https://opencode.ai/config.json",
-            "agent": {"user-agent": {"mode": "primary", "model": "anthropic/claude-opus-4-6"}},
+            "agent": {
+                "user-agent": {"mode": "primary", "model": "anthropic/claude-opus-4-6"}
+            },
             "command": {"user-cmd": {"template": "user template"}},
             "mcp": {"my-server": {"type": "local"}},
         }
         (opencode_dir / "opencode.json").write_text(json.dumps(existing))
 
         adapter = OpenCodeAdapter()
-        agents = [AgentSpec(name="bp-pipeline", description="d", model="sonnet", tools=[], body="b")]
+        agents = [
+            AgentSpec(
+                name="bp-pipeline", description="d", model="sonnet", tools=[], body="b"
+            )
+        ]
         commands = [CommandSpec(name="bp", description="d", body="b")]
         adapter.write_all(agents, commands)
 
@@ -263,7 +317,11 @@ class TestOpenCodeAdapter:
 
     def test_installed_file_relpaths(self) -> None:
         adapter = OpenCodeAdapter()
-        agents = [AgentSpec(name="bp-pipeline", description="d", model="sonnet", tools=[], body="b")]
+        agents = [
+            AgentSpec(
+                name="bp-pipeline", description="d", model="sonnet", tools=[], body="b"
+            )
+        ]
         commands = [CommandSpec(name="bp", description="d", body="b")]
         relpaths = adapter.installed_file_relpaths(agents, commands)
         assert "prompts/bp-pipeline.md" in relpaths
@@ -289,7 +347,11 @@ class TestOpenCodeAdapter:
         (opencode_dir / "opencode.json").write_text(json.dumps(config))
 
         adapter = OpenCodeAdapter()
-        agents = [AgentSpec(name="bp-pipeline", description="d", model="sonnet", tools=[], body="b")]
+        agents = [
+            AgentSpec(
+                name="bp-pipeline", description="d", model="sonnet", tools=[], body="b"
+            )
+        ]
         commands = [CommandSpec(name="bp", description="d", body="b")]
         adapter.remove_entries(agents, commands)
 
@@ -305,7 +367,11 @@ class TestOpenCodeAdapter:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         adapter = OpenCodeAdapter()
         # Should not raise even if opencode.json doesn't exist
-        agents = [AgentSpec(name="bp-pipeline", description="d", model="sonnet", tools=[], body="b")]
+        agents = [
+            AgentSpec(
+                name="bp-pipeline", description="d", model="sonnet", tools=[], body="b"
+            )
+        ]
         adapter.remove_entries(agents, [])
 
 
@@ -452,7 +518,9 @@ class TestResolveTuiTargets:
 
 
 class TestDetectTuis:
-    def test_detects_claude(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def test_detects_claude(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         monkeypatch.setattr(
             "best_practices_rag.tui.shutil.which",
             lambda x: "/usr/bin/claude" if x == "claude" else None,
@@ -485,7 +553,9 @@ class TestDetectTuis:
         result = detect_tuis()
         assert TuiKind.OPENCODE in result
 
-    def test_detects_both(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def test_detects_both(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         monkeypatch.setattr(
             "best_practices_rag.tui.shutil.which",
             lambda x: f"/usr/bin/{x}" if x in ("claude", "opencode") else None,
@@ -495,7 +565,9 @@ class TestDetectTuis:
         assert TuiKind.CLAUDE in result
         assert TuiKind.OPENCODE in result
 
-    def test_detects_none(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def test_detects_none(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         monkeypatch.setattr("best_practices_rag.tui.shutil.which", lambda _: None)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         result = detect_tuis()

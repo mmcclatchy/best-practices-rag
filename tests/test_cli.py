@@ -330,8 +330,6 @@ def test_setup_opencode_creates_prompts_and_json(
     tmp_path: Path,
 ) -> None:
     """setup --tui opencode writes prompt files and opencode.json."""
-    import json
-
     mocker.patch("pathlib.Path.home", return_value=tmp_path)
     mocker.patch(
         "best_practices_rag.cli._bundle_root", return_value=tmp_path / "bundle"
@@ -381,8 +379,6 @@ def test_setup_opencode_writes_manifest(
     tmp_path: Path,
 ) -> None:
     """setup --tui opencode records opencode_files in the manifest."""
-    import json
-
     mocker.patch("pathlib.Path.home", return_value=tmp_path)
     mocker.patch(
         "best_practices_rag.cli._bundle_root", return_value=tmp_path / "bundle"
@@ -424,8 +420,6 @@ def test_check_opencode_passes_when_files_present(
     tmp_path: Path,
 ) -> None:
     """check --tui opencode passes when all expected files exist."""
-    import json
-
     mocker.patch("pathlib.Path.home", return_value=tmp_path)
 
     opencode_root = tmp_path / ".config" / "opencode"
@@ -454,10 +448,19 @@ def test_check_opencode_passes_when_files_present(
     mocker.patch("best_practices_rag.cli.get_settings", return_value=mock_settings)
     mock_driver_instance = mocker.MagicMock()
     mock_driver_instance.execute_query.return_value = (
-        [{"names": ["bp_fulltext", "constraint_best_practice_id",
-                    "constraint_technology_id", "constraint_pattern_id",
-                    "index_best_practice_name", "index_best_practice_category",
-                    "index_technology_name"]}],
+        [
+            {
+                "names": [
+                    "bp_fulltext",
+                    "constraint_best_practice_id",
+                    "constraint_technology_id",
+                    "constraint_pattern_id",
+                    "index_best_practice_name",
+                    "index_best_practice_category",
+                    "index_technology_name",
+                ]
+            }
+        ],
         None,
         None,
     )
@@ -478,8 +481,6 @@ def test_uninstall_opencode_removes_prompts(
     tmp_path: Path,
 ) -> None:
     """uninstall --tui opencode removes prompt files and cleans opencode.json."""
-    import json as json_mod
-
     mocker.patch("pathlib.Path.home", return_value=tmp_path)
     mocker.patch(
         "best_practices_rag.cli._bundle_root", return_value=tmp_path / "bundle"
@@ -496,7 +497,7 @@ def test_uninstall_opencode_removes_prompts(
         "agent": {"bp-pipeline": {"mode": "subagent"}, "user": {"mode": "primary"}},
         "command": {"bp": {"template": "x"}, "bpr": {"template": "y"}},
     }
-    (opencode_dir / "opencode.json").write_text(json_mod.dumps(oc_config))
+    (opencode_dir / "opencode.json").write_text(json.dumps(oc_config))
 
     # Set up bundle with agent/command files (needed for remove_entries)
     bundle = tmp_path / "bundle"
@@ -508,8 +509,6 @@ def test_uninstall_opencode_removes_prompts(
     (bundle / "commands" / "bp.md").write_text("# BP\nbody")
     (bundle / "commands" / "bpr.md").write_text("# BPR\nbody")
 
-    from best_practices_rag.cli import uninstall
-
     uninstall(remove_all=False, tui="opencode")
 
     # Prompt files should be removed
@@ -518,7 +517,7 @@ def test_uninstall_opencode_removes_prompts(
     assert not (prompts_dir / "bpr.md").exists()
 
     # opencode.json should have our entries removed but user entry preserved
-    config = json_mod.loads((opencode_dir / "opencode.json").read_text())
+    config = json.loads((opencode_dir / "opencode.json").read_text())
     assert "bp-pipeline" not in config["agent"]
     assert "user" in config["agent"]
 

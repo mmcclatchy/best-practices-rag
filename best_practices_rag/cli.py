@@ -92,7 +92,6 @@ def _bundle_claude_files(bundle: Path) -> set[str]:
 
 
 def _bundle_skills_files(bundle: Path) -> set[str]:
-    """Return relative paths for skills/best-practices-rag files only."""
     result: set[str] = set()
     src = bundle / "skills" / "best-practices-rag"
     if src.exists():
@@ -103,7 +102,6 @@ def _bundle_skills_files(bundle: Path) -> set[str]:
 
 
 def _read_manifest(config_dir: Path) -> tuple[list[str], list[str]]:
-    """Return (claude_files, opencode_files) from the manifest."""
     path = config_dir / "manifest.json"
     if not path.exists():
         return [], []
@@ -217,7 +215,6 @@ def _install_tui_files(
 
 
 def _compute_tui_relpaths(bundle: Path, adapter: TuiAdapter) -> list[str]:
-    """Return the rel-paths adapter would install without writing any files."""
     agents: list[AgentSpec] = []
     commands: list[CommandSpec] = []
     agents_src = bundle / "agents"
@@ -459,7 +456,9 @@ def setup(
     # Skills always install to ~/.claude/ (OpenCode reads via compat shim)
     skills_files = _bundle_skills_files(bundle)
     if TuiKind.CLAUDE in tui_targets:
-        expected_claude = skills_files | set(_compute_tui_relpaths(bundle, ClaudeCodeAdapter()))
+        expected_claude = skills_files | set(
+            _compute_tui_relpaths(bundle, ClaudeCodeAdapter())
+        )
     else:
         expected_claude = skills_files
     _remove_stale_claude_files(claude_dir, config_dir, expected_claude)
@@ -1466,7 +1465,9 @@ def update(
             # Skills always update to ~/.claude/ (OpenCode reads via compat shim)
             skills_files = _bundle_skills_files(bundle)
             if TuiKind.CLAUDE in tui_targets:
-                expected_claude = skills_files | set(_compute_tui_relpaths(bundle, ClaudeCodeAdapter()))
+                expected_claude = skills_files | set(
+                    _compute_tui_relpaths(bundle, ClaudeCodeAdapter())
+                )
             else:
                 expected_claude = skills_files
             _remove_stale_claude_files(claude_dir, config_dir, expected_claude)
@@ -1481,7 +1482,9 @@ def update(
             for tui_kind in tui_targets:
                 adapter = get_adapter(tui_kind)
                 if tui_kind == TuiKind.OPENCODE:
-                    _remove_stale_opencode_files(adapter.install_root(), config_dir, set())
+                    _remove_stale_opencode_files(
+                        adapter.install_root(), config_dir, set()
+                    )
                 _, relpaths = _install_tui_files(bundle, adapter)
                 if tui_kind == TuiKind.CLAUDE:
                     claude_tui_files = set(relpaths)

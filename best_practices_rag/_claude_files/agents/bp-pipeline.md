@@ -31,6 +31,7 @@ PRIMARY_QUERY: <versioned query string built by the main session, e.g. "FastAPI 
 OUTPUT_FILE: <workspace-relative path for the saved document, e.g. .best-practices/fastapi-sqlalchemy-async-session-management-codegen.md>
 TOPICS: <comma-separated topic keywords, e.g. "async,session management">
 LANGUAGES: <comma-separated language names (optional), e.g. "python">
+LANGUAGE_AGNOSTIC: <"true" if the query is language-agnostic (optional) — mutually exclusive with LANGUAGES; when set, synthesis uses pseudocode>
 STALE_CONTEXT_BODY: <body text of stale KB entries (optional)>
 STALE_TECHNOLOGIES: <comma-separated list of technologies whose versions changed (optional), e.g. "sqlalchemy">
 VERSION_DELTAS: <JSON string of version changes (optional), e.g. {"sqlalchemy":{"stored":"2.0","current":"2.1"}}>
@@ -169,6 +170,8 @@ Follow all rules in the synthesis format file selected in Step 3. The synthesis 
 - Flag any deprecated APIs identified in the context7 documentation
 - Label each reference in the References section with its tier (`[Official]`, `[Library Author]`, or `[Community]`) matching the `SOURCE_TIERS` classification from Step 1
 
+If `LANGUAGE_AGNOSTIC` is `true`, apply the language-agnostic synthesis rules from the synthesis format file — use pseudocode for all code examples and avoid language-specific API calls or imports.
+
 ### Step 4.5 — Self-review
 
 Re-read the synthesized document before writing. Fix any issues in-place — this is a single pass, not an iterative loop.
@@ -276,6 +279,7 @@ Merge all `FRESH_DOCS` body fields into a single best-practices document followi
 - Apply the classifications from the critical evaluation above to select and prioritize content
 - For MODE=codegen: the Critical API Changes section must contain ONLY items classified as Novel. Canonical Patterns should prioritize Emphasis-worthy items. De-duplicate across all sections: if the same API change or pattern appears in more than one section (e.g., Critical API Changes AND Anti-Patterns, or Canonical Patterns AND Anti-Patterns), keep it in the higher-priority section and remove it from the lower one. Priority order: Critical API Changes > Canonical Patterns > Anti-Patterns.
 - For MODE=research: use the conceptual groupings from the critical evaluation as the organizing structure for Core Concepts. Generate a Table of Contents from the final heading structure.
+- If `LANGUAGE_AGNOSTIC` is `true`, apply the language-agnostic code rules from the synthesis format file. This overrides language-specific code example behavior.
 
 **Self-review:**
 

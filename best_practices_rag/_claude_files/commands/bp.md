@@ -17,13 +17,34 @@ Output directory: `.best-practices/`
 
 Execute each step in order. Steps 1–4 run in the main session and produce scalar parameters. Step 5 delegates all large-data work to bp-pipeline.
 
-### Step 1 — Extract technologies and topics
+### Step 1 — Extract technologies, topics, and language context
 
 Parse `$ARGUMENTS`. Identify:
 - Technology names (e.g., `fastapi`, `sqlalchemy`, `neo4j`)
 - Topic keywords (e.g., `async`, `session management`, `connection pooling`)
 - Language names if mentioned (e.g., `python`)
 - `--force-refresh` flag — if present, skip Steps 3-4 entirely and proceed directly to Step 5. Remove the flag from the query before using `$ARGUMENTS` elsewhere.
+
+**Language classification** (skip if the user explicitly named a language above):
+
+1. **Technology-implied**: Every language-specific technology in the query maps to the same canonical language (e.g., `fastapi` → python, `express` → typescript). Auto-set `LANGUAGES` to that language. If some technologies are language-specific and others are language-neutral (e.g., `fastapi + redis`), use the language implied by the language-specific ones.
+
+2. **Language-agnostic**: The query is purely conceptual or architectural — no language-specific technologies, and the topic is about patterns, architecture, design, strategies, or tradeoffs (e.g., `circuit breaker pattern`, `CQRS event sourcing`, `redis caching strategies`). Set `LANGUAGE_AGNOSTIC = true` and omit `LANGUAGES`.
+
+3. **Ambiguous / Unrecognized**: Any of these conditions trigger the user prompt:
+   - Technologies from different languages are mixed (e.g., `fastapi + express`)
+   - The concept is typically shown with code but no technology constrains the language (e.g., `retry exponential backoff`)
+   - Any technology is not recognized from your training data (post-cutoff library, niche tool). If you are unsure what language a technology belongs to, do NOT guess — treat it as ambiguous.
+
+   Ask the user:
+
+   > This query could apply to multiple languages. How should I handle code examples?
+   >
+   > 1. **Pseudocode** — language-neutral examples
+   > 2. **Specific language** — tell me which (e.g., python, go, typescript)
+
+   If pseudocode: set `LANGUAGE_AGNOSTIC = true`, omit `LANGUAGES`.
+   If language named: set `LANGUAGES` to that language.
 
 ### Step 2 — Look up current versions
 
@@ -127,6 +148,7 @@ PRIMARY_QUERY: <versioned query string built above>
 OUTPUT_FILE: <OUTPUT_FILE from Step 2>
 TOPICS: <comma-separated topic keywords from Step 1>
 LANGUAGES: <comma-separated language names if identified in Step 1, omit if none>
+LANGUAGE_AGNOSTIC: <true if classified as language-agnostic in Step 1, omit otherwise>
 STALE_CONTEXT_BODY: <body text of stale KB results from Step 3, omit if none>
 STALE_TECHNOLOGIES: <comma-separated list from Step 3 staleness check, omit if none>
 VERSION_DELTAS: <JSON string from Step 3, e.g. {"sqlalchemy":{"stored":"2.0","current":"2.1"}}, omit if none>

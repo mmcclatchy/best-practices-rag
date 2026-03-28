@@ -20,7 +20,9 @@ Rules (inheriting all base rules from synthesis-format.md):
 - All code examples must include complete imports at the top of the block.
 - All code examples must include type annotations on function parameters and return types.
 - Each code example must be self-contained and runnable without additional context.
-- When language context is provided, show code examples in those languages.
+- When language context is provided (`LANGUAGES` field), show all code examples in those languages.
+- When the query is language-agnostic (`LANGUAGE_AGNOSTIC` is true), follow the language-agnostic rules from synthesis-format.md (pseudocode blocks, no language-specific syntax).
+- When neither LANGUAGES nor LANGUAGE_AGNOSTIC is provided, use the language most natural for the technologies discussed.
 - Include version-specific behaviour differences and non-obvious gotchas where present in the sources.
 - Focus on production-quality patterns: error handling, observability, performance, and operational concerns.
 - References section must list each source as a markdown link: [Title](URL).
@@ -33,6 +35,7 @@ Codegen-specific rules:
 - **Source preference:** When resolving conflicting recommendations, prefer Official sources over Library Author sources, and Library Author sources over Community sources. If a SOURCE_TIERS section is provided in the synthesis context, use those tier assignments. Otherwise, infer tiers from URL domains.
 - When two or more sources contradict each other, emit a blockquote callout immediately before the affected code section: `> **Sources Conflict:** [description of the disagreement and which source you followed]`.
 - Do not include docstrings in code example blocks. Inline comments on non-obvious lines are acceptable; docstrings pad examples without adding implementation value.
+- **Language-agnostic override**: When `LANGUAGE_AGNOSTIC` is true, pseudocode blocks do not require version comments. Critical API Changes use plain-text format referencing technology and version without inline code. Canonical Patterns and Anti-pattern BAD/GOOD blocks use ` ```pseudocode `.
 
 Section-specific rules:
 

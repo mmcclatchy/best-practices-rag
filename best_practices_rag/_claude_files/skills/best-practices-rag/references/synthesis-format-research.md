@@ -25,7 +25,9 @@ Rules (inheriting all base rules from synthesis-format.md):
 - All code examples must include complete imports at the top of the block.
 - All code examples must include type annotations on function parameters and return types. This applies to ALL code blocks including BAD anti-pattern examples. The anti-pattern being shown is API misuse — not missing type annotations. BAD blocks must be syntactically complete with full type annotations.
 - Each code example must be self-contained and runnable without additional context.
-- When language context is provided, show code examples in those languages.
+- When language context is provided (`LANGUAGES` field), show all code examples in those languages.
+- When the query is language-agnostic (`LANGUAGE_AGNOSTIC` is true), follow the language-agnostic rules from synthesis-format.md (pseudocode blocks, no language-specific syntax).
+- When neither LANGUAGES nor LANGUAGE_AGNOSTIC is provided, use the language most natural for the technologies discussed.
 - For each anti-pattern, show a BAD block followed by a GOOD block using ``` fences.
 - Include version-specific behaviour differences and non-obvious gotchas where present in the sources.
 - Focus on production-quality patterns: error handling, observability, performance, and operational concerns.
@@ -39,6 +41,7 @@ Research-specific rules:
 - **Source preference:** When resolving conflicting recommendations, prefer Official sources over Library Author sources, and Library Author sources over Community sources. If a SOURCE_TIERS section is provided in the synthesis context, use those tier assignments. Otherwise, infer tiers from URL domains.
 - Do NOT include a "Training Data Gaps" or "Critical API Changes" section — these sections are exclusive to codegen mode.
 - Favor depth over breadth: cover 3-4 concepts thoroughly with full rationale, tradeoffs, and edge cases rather than surface-level coverage of many patterns.
+- **Language-agnostic override**: When `LANGUAGE_AGNOSTIC` is true, code examples use ` ```pseudocode `. Version-specific headings still reference technologies and versions. Comparison tables showing how patterns differ across languages are encouraged.
 
 Section-specific rules:
 

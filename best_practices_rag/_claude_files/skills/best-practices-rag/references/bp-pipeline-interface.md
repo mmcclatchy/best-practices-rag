@@ -17,6 +17,7 @@ All fields are strings unless noted. Optional fields may be omitted from the Tas
 | `OUTPUT_FILE` | Required | workspace-relative path | e.g., `.best-practices/fastapi-async-codegen.md` |
 | `TOPICS` | Required | comma-separated string | Topic keywords from query parsing |
 | `LANGUAGES` | Optional | comma-separated string | e.g., `"python"` — omit if not mentioned |
+| `LANGUAGE_AGNOSTIC` | Optional | `"true"` string | Mutually exclusive with LANGUAGES — synthesis uses pseudocode |
 | `STALE_CONTEXT_BODY` | Optional | string | Body text of stale KB entries; omit if none |
 | `STALE_TECHNOLOGIES` | Optional | comma-separated string | Technologies whose versions changed |
 | `VERSION_DELTAS` | Optional | JSON string | `{"tech":{"stored":"x","current":"y"}}` |
@@ -63,6 +64,24 @@ TOPICS: async,session management
 LANGUAGES: python
 ALL_QUERIED_TECHS: fastapi,sqlalchemy
 ```
+
+## Language-Agnostic Task Block Example
+
+```text
+Task(bp-pipeline):
+MODE: research
+TECH: redis
+QUERY: caching strategies
+TECH_VERSIONS_JSON: {"redis":"7.4"}
+CUTOFF_DATE: 2024-01-01
+PRIMARY_QUERY: Redis 7.4 caching strategies official documentation
+OUTPUT_FILE: .best-practices/redis-caching-strategies-research.md
+TOPICS: caching,strategies
+LANGUAGE_AGNOSTIC: true
+ALL_QUERIED_TECHS: redis
+```
+
+Note: `LANGUAGE_AGNOSTIC` and `LANGUAGES` are mutually exclusive. When `LANGUAGE_AGNOSTIC` is true, synthesis uses pseudocode for all code examples.
 
 ## Cache-Hit Task Block Example
 

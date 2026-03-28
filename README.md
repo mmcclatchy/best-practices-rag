@@ -86,9 +86,32 @@ Get a free Exa API key at [exa.ai](https://exa.ai/) (1,000 free requests/month).
 
 ---
 
+### Option 3: OpenCode
+
+best-practices-rag supports [OpenCode](https://opencode.ai) in addition to Claude Code.
+Use `--tui` to control which tool(s) receive the installed agents and commands:
+
+```bash
+# Install for OpenCode only
+best-practices-rag setup --tui opencode
+
+# Install for both Claude Code and OpenCode
+best-practices-rag setup --tui both
+
+# Auto-detect installed TUIs (default — installs for whichever is found)
+best-practices-rag setup
+```
+
+The `--tui` flag is available on `setup`, `check`, `uninstall`, and `update`.
+
+Skills/reference files are always installed to `~/.claude/skills/` — OpenCode reads
+them from that location via its built-in compat shim, so no duplication is needed.
+
+---
+
 ## Usage
 
-Once installed, use `/bp` in Claude Code for synthesized best practices:
+Once installed, use `/bp` in Claude Code or OpenCode for synthesized best practices:
 
 ```text
 /bp fastapi sqlalchemy async
@@ -136,15 +159,15 @@ This skips the local cache entirely, fetches new content from Exa, and updates t
 ## All Commands
 
 ```bash
-best-practices-rag setup          # global one-command setup
-best-practices-rag setup-schema   # apply schema to existing Neo4j (no Docker required)
-best-practices-rag check          # validate global installation (~/.claude/)
-best-practices-rag query-kb       # query knowledge base (used by /bp)
-best-practices-rag search-exa     # search Exa (used by gap-fill agent)
-best-practices-rag store-result   # store synthesized result to Neo4j
-best-practices-rag uninstall      # remove installed ~/.claude/ files
-best-practices-rag version        # show installed version
-best-practices-rag update         # upgrade to the latest release
+best-practices-rag setup [--tui auto|claude|opencode|both]   # global one-command setup
+best-practices-rag setup-schema                              # apply schema to existing Neo4j (no Docker required)
+best-practices-rag check [--tui auto|claude|opencode|both]   # validate installed files
+best-practices-rag query-kb                                  # query knowledge base (used by /bp)
+best-practices-rag search-exa                                # search Exa (used by gap-fill agent)
+best-practices-rag store-result                              # store synthesized result to Neo4j
+best-practices-rag uninstall [--tui auto|claude|opencode|both]  # remove installed files
+best-practices-rag version                                   # show installed version
+best-practices-rag update [--tui auto|claude|opencode|both]  # upgrade to the latest release
 ```
 
 ---
@@ -183,4 +206,4 @@ Install `uv` and `best-practices-rag` from inside the WSL2 terminal using the Li
 
 ## Version
 
-v0.1.35
+v0.2.0

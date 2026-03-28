@@ -15,6 +15,7 @@ from best_practices_rag.cli import query_kb
 from best_practices_rag.cli import search_exa
 from best_practices_rag.cli import setup
 from best_practices_rag.cli import setup_schema
+from best_practices_rag.cli import uninstall
 from best_practices_rag.cli import update
 from best_practices_rag.cli import version
 from best_practices_rag.search import ExaSearchError
@@ -123,6 +124,7 @@ def test_setup_standalone_creates_global_files(
         neo4j_username=None,
         exa_api_key=None,
         neo4j_port=None,
+        tui="claude",
     )
 
     config_dir = tmp_path / ".config" / "best-practices-rag"
@@ -158,6 +160,7 @@ def test_setup_existing_neo4j_skips_docker(
         neo4j_username="neo4j",
         exa_api_key=None,
         neo4j_port=None,
+        tui="claude",
     )
 
     mock_setup_main.assert_called_once()
@@ -196,6 +199,7 @@ def test_setup_force_overwrites(
         neo4j_username=None,
         exa_api_key=None,
         neo4j_port=None,
+        tui="claude",
     )
 
     assert (secrets_dir / "neo4j_password").read_text() == "oldpass"
@@ -247,7 +251,7 @@ def test_cmd_check_validates_global_claude_dir(
         "best_practices_rag.cli.GraphDatabase.driver", return_value=mock_driver_instance
     )
 
-    check()
+    check(tui="claude")
 
     out = capsys.readouterr().out
     assert "~/.claude/" in out
@@ -275,8 +279,10 @@ def test_update_uses_uv(
         return_value=mocker.MagicMock(returncode=0),
     )
     mock_schema = mocker.patch("best_practices_rag.cli._run_setup_schema")
+    mocker.patch("best_practices_rag.cli._install_tui_files", return_value=([], []))
+    mocker.patch("best_practices_rag.cli._copy_tree", return_value=[])
 
-    update()
+    update(tui="claude")
 
     assert mock_run.call_args[0][0] == ["uv", "tool", "upgrade", "best-practices-rag"]
     mock_schema.assert_called_once()
@@ -294,8 +300,10 @@ def test_update_falls_back_to_pipx(
         return_value=mocker.MagicMock(returncode=0),
     )
     mock_schema = mocker.patch("best_practices_rag.cli._run_setup_schema")
+    mocker.patch("best_practices_rag.cli._install_tui_files", return_value=([], []))
+    mocker.patch("best_practices_rag.cli._copy_tree", return_value=[])
 
-    update()
+    update(tui="claude")
 
     assert mock_run.call_args[0][0] == [
         "pipx",
@@ -311,9 +319,208 @@ def test_update_exits_if_no_manager(
     mocker.patch("best_practices_rag.cli.shutil.which", return_value=None)
 
     with pytest.raises(SystemExit) as exc_info:
-        update()
+        update(tui="auto")
 
     assert exc_info.value.code == 1
+
+
+def test_setup_opencode_creates_prompts_and_json(
+    mocker: MockerFixture,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    """setup --tui opencode writes prompt files and opencode.json."""
+    import json
+
+    mocker.patch("pathlib.Path.home", return_value=tmp_path)
+    mocker.patch(
+        "best_practices_rag.cli._bundle_root", return_value=tmp_path / "bundle"
+    )
+    mocker.patch("best_practices_rag.cli._copy_tree", return_value=[])
+    mocker.patch("best_practices_rag.cli._setup_docker_neo4j")
+
+    bundle = tmp_path / "bundle"
+    # Create minimal bundle with agent and command
+    agents_dir = bundle / "agents"
+    agents_dir.mkdir(parents=True)
+    (agents_dir / "bp-pipeline.md").write_text(
+        "---\nname: bp-pipeline\ndescription: Pipeline\ntools: Bash, Read\nmodel: sonnet\n---\n\nbody"
+    )
+    commands_dir = bundle / "commands"
+    commands_dir.mkdir(parents=True)
+    (commands_dir / "bp.md").write_text("# Best Practices Research\n\nbody")
+    (bundle / "infra").mkdir(parents=True)
+    (bundle / "infra" / ".env.example").write_text("# example\n")
+
+    setup(
+        force=False,
+        password=None,
+        neo4j_uri=None,
+        neo4j_username=None,
+        exa_api_key=None,
+        neo4j_port=None,
+        tui="opencode",
+    )
+
+    prompts_dir = tmp_path / ".config" / "opencode" / "prompts"
+    assert (prompts_dir / "bp-pipeline.md").exists()
+    assert (prompts_dir / "bp.md").exists()
+
+    opencode_json = tmp_path / ".config" / "opencode" / "opencode.json"
+    assert opencode_json.exists()
+    config = json.loads(opencode_json.read_text())
+    assert "bp-pipeline" in config["agent"]
+    assert "bp" in config["command"]
+    assert config["agent"]["bp-pipeline"]["mode"] == "subagent"
+    assert config["agent"]["bp-pipeline"]["model"] == "anthropic/claude-sonnet-4-6"
+
+
+def test_setup_opencode_writes_manifest(
+    mocker: MockerFixture,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    """setup --tui opencode records opencode_files in the manifest."""
+    import json
+
+    mocker.patch("pathlib.Path.home", return_value=tmp_path)
+    mocker.patch(
+        "best_practices_rag.cli._bundle_root", return_value=tmp_path / "bundle"
+    )
+    mocker.patch("best_practices_rag.cli._copy_tree", return_value=[])
+    mocker.patch("best_practices_rag.cli._setup_docker_neo4j")
+
+    bundle = tmp_path / "bundle"
+    (bundle / "agents").mkdir(parents=True)
+    (bundle / "agents" / "bp-pipeline.md").write_text(
+        "---\nname: bp-pipeline\ndescription: d\ntools: Bash\nmodel: sonnet\n---\nbody"
+    )
+    (bundle / "commands").mkdir(parents=True)
+    (bundle / "commands" / "bp.md").write_text("# BP\nbody")
+    (bundle / "infra").mkdir(parents=True)
+    (bundle / "infra" / ".env.example").write_text("# example\n")
+
+    setup(
+        force=False,
+        password=None,
+        neo4j_uri=None,
+        neo4j_username=None,
+        exa_api_key=None,
+        neo4j_port=None,
+        tui="opencode",
+    )
+
+    manifest_path = tmp_path / ".config" / "best-practices-rag" / "manifest.json"
+    assert manifest_path.exists()
+    manifest = json.loads(manifest_path.read_text())
+    assert "prompts/bp-pipeline.md" in manifest["opencode_files"]
+    assert "prompts/bp.md" in manifest["opencode_files"]
+    assert "opencode.json" in manifest["opencode_files"]
+
+
+def test_check_opencode_passes_when_files_present(
+    mocker: MockerFixture,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    """check --tui opencode passes when all expected files exist."""
+    import json
+
+    mocker.patch("pathlib.Path.home", return_value=tmp_path)
+
+    opencode_root = tmp_path / ".config" / "opencode"
+    for f in [
+        "prompts/bp-pipeline.md",
+        "prompts/bp.md",
+        "prompts/bpr.md",
+        "opencode.json",
+    ]:
+        p = opencode_root / f
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("{}" if f.endswith(".json") else "")
+
+    # Also write manifest so check knows opencode was installed
+    config_dir = tmp_path / ".config" / "best-practices-rag"
+    config_dir.mkdir(parents=True)
+    (config_dir / "manifest.json").write_text(
+        json.dumps({"opencode_files": ["prompts/bp.md"]})
+    )
+
+    mock_settings = mocker.MagicMock()
+    mock_settings.neo4j_uri = "bolt://localhost:7687"
+    mock_settings.neo4j_username = "neo4j"
+    mock_settings.neo4j_password.get_secret_value.return_value = "test"
+    mock_settings.exa_api_key.get_secret_value.return_value = "test-key"
+    mocker.patch("best_practices_rag.cli.get_settings", return_value=mock_settings)
+    mock_driver_instance = mocker.MagicMock()
+    mock_driver_instance.execute_query.return_value = (
+        [{"names": ["bp_fulltext", "constraint_best_practice_id",
+                    "constraint_technology_id", "constraint_pattern_id",
+                    "index_best_practice_name", "index_best_practice_category",
+                    "index_technology_name"]}],
+        None,
+        None,
+    )
+    mocker.patch(
+        "best_practices_rag.cli.GraphDatabase.driver", return_value=mock_driver_instance
+    )
+
+    check(tui="opencode")
+
+    out = capsys.readouterr().out
+    assert "~/.config/opencode/" in out
+    assert "[FAIL]" not in out
+
+
+def test_uninstall_opencode_removes_prompts(
+    mocker: MockerFixture,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    """uninstall --tui opencode removes prompt files and cleans opencode.json."""
+    import json as json_mod
+
+    mocker.patch("pathlib.Path.home", return_value=tmp_path)
+    mocker.patch(
+        "best_practices_rag.cli._bundle_root", return_value=tmp_path / "bundle"
+    )
+
+    # Set up OpenCode files
+    opencode_dir = tmp_path / ".config" / "opencode"
+    prompts_dir = opencode_dir / "prompts"
+    prompts_dir.mkdir(parents=True)
+    for fname in ["bp-pipeline.md", "bp.md", "bpr.md"]:
+        (prompts_dir / fname).write_text("content")
+
+    oc_config = {
+        "agent": {"bp-pipeline": {"mode": "subagent"}, "user": {"mode": "primary"}},
+        "command": {"bp": {"template": "x"}, "bpr": {"template": "y"}},
+    }
+    (opencode_dir / "opencode.json").write_text(json_mod.dumps(oc_config))
+
+    # Set up bundle with agent/command files (needed for remove_entries)
+    bundle = tmp_path / "bundle"
+    (bundle / "agents").mkdir(parents=True)
+    (bundle / "agents" / "bp-pipeline.md").write_text(
+        "---\nname: bp-pipeline\ndescription: d\ntools: Bash\nmodel: sonnet\n---\nbody"
+    )
+    (bundle / "commands").mkdir(parents=True)
+    (bundle / "commands" / "bp.md").write_text("# BP\nbody")
+    (bundle / "commands" / "bpr.md").write_text("# BPR\nbody")
+
+    from best_practices_rag.cli import uninstall
+
+    uninstall(remove_all=False, tui="opencode")
+
+    # Prompt files should be removed
+    assert not (prompts_dir / "bp-pipeline.md").exists()
+    assert not (prompts_dir / "bp.md").exists()
+    assert not (prompts_dir / "bpr.md").exists()
+
+    # opencode.json should have our entries removed but user entry preserved
+    config = json_mod.loads((opencode_dir / "opencode.json").read_text())
+    assert "bp-pipeline" not in config["agent"]
+    assert "user" in config["agent"]
 
 
 def test_query_kb_format_md_outputs_markdown(

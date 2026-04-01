@@ -34,16 +34,13 @@ from best_practices_rag.staleness import (
     load_tech_info,
 )
 from best_practices_rag.storage import store_results
+from best_practices_rag.agent_defs import AGENTS, COMMANDS
 from best_practices_rag.tui import (
     AgentSpec,
-    ClaudeCodeAdapter,
     CommandSpec,
-    OpenCodeAdapter,
     TuiAdapter,
     TuiKind,
     get_adapter,
-    parse_claude_agent,
-    parse_claude_command,
     resolve_tui_targets,
 )
 
@@ -60,7 +57,7 @@ app = typer.Typer(
 
 
 def _bundle_root() -> Path:
-    return Path(str(files("best_practices_rag") / "_claude_files"))
+    return Path(str(files("best_practices_rag") / "resources"))
 
 
 def _copy_tree(src: Path, dst: Path, *, force: bool) -> list[str]:
@@ -78,20 +75,6 @@ def _copy_tree(src: Path, dst: Path, *, force: bool) -> list[str]:
         copied.append(str(rel))
         print(f"  copied: {target}")
     return copied
-
-
-def _bundle_claude_files(bundle: Path) -> set[str]:
-    result: set[str] = set()
-    for prefix, src in [
-        ("commands", bundle / "commands"),
-        ("agents", bundle / "agents"),
-        ("skills/best-practices-rag", bundle / "skills" / "best-practices-rag"),
-    ]:
-        if src.exists():
-            for item in src.rglob("*"):
-                if item.is_file():
-                    result.add(f"{prefix}/{item.relative_to(src)}")
-    return result
 
 
 def _bundle_skills_files(bundle: Path) -> set[str]:
@@ -192,43 +175,26 @@ def _remove_stale_opencode_files(
 
 
 def _install_tui_files(
-    bundle: Path,
     adapter: TuiAdapter,
+    agents: list[AgentSpec] | None = None,
+    commands: list[CommandSpec] | None = None,
 ) -> tuple[list[Path], list[str]]:
-    """Parse bundled Claude-format files and install via adapter.
+    """Install agents and commands via adapter.
 
     Returns (written_paths, rel_paths_for_manifest).
     """
-    agents: list[AgentSpec] = []
-    commands: list[CommandSpec] = []
-
-    agents_src = bundle / "agents"
-    if agents_src.exists():
-        for f in sorted(agents_src.glob("*.md")):
-            agents.append(parse_claude_agent(f.read_text(encoding="utf-8")))
-
-    commands_src = bundle / "commands"
-    if commands_src.exists():
-        for f in sorted(commands_src.glob("*.md")):
-            commands.append(parse_claude_command(f.read_text(encoding="utf-8"), f.stem))
+    if agents is None:
+        agents = AGENTS
+    if commands is None:
+        commands = COMMANDS
 
     written = adapter.write_all(agents, commands)
     relpaths = adapter.installed_file_relpaths(agents, commands)
     return written, relpaths
 
 
-def _compute_tui_relpaths(bundle: Path, adapter: TuiAdapter) -> list[str]:
-    agents: list[AgentSpec] = []
-    commands: list[CommandSpec] = []
-    agents_src = bundle / "agents"
-    if agents_src.exists():
-        for f in sorted(agents_src.glob("*.md")):
-            agents.append(parse_claude_agent(f.read_text(encoding="utf-8")))
-    commands_src = bundle / "commands"
-    if commands_src.exists():
-        for f in sorted(commands_src.glob("*.md")):
-            commands.append(parse_claude_command(f.read_text(encoding="utf-8"), f.stem))
-    return adapter.installed_file_relpaths(agents, commands)
+def _compute_tui_relpaths(adapter: TuiAdapter) -> list[str]:
+    return adapter.installed_file_relpaths(AGENTS, COMMANDS)
 
 
 def _parse_frontmatter(text: str) -> dict[str, str] | None:
@@ -460,7 +426,7 @@ def setup(
     skills_files = _bundle_skills_files(bundle)
     if TuiKind.CLAUDE in tui_targets:
         expected_claude = skills_files | set(
-            _compute_tui_relpaths(bundle, ClaudeCodeAdapter())
+            _compute_tui_relpaths(get_adapter(TuiKind.CLAUDE))
         )
     else:
         expected_claude = skills_files
@@ -479,7 +445,7 @@ def setup(
         adapter = get_adapter(tui_kind)
         if tui_kind == TuiKind.OPENCODE:
             _remove_stale_opencode_files(adapter.install_root(), config_dir, set())
-        _, relpaths = _install_tui_files(bundle, adapter)
+        _, relpaths = _install_tui_files(adapter)
         if tui_kind == TuiKind.CLAUDE:
             claude_tui_files = set(relpaths)
         else:
@@ -1354,21 +1320,8 @@ def uninstall(
                 print(f"  skip (missing): {f}")
 
         # Remove our entries from opencode.json without deleting the file
-        bundle = _bundle_root()
-        agents: list[AgentSpec] = []
-        commands: list[CommandSpec] = []
-        agents_src = bundle / "agents"
-        if agents_src.exists():
-            for af in sorted(agents_src.glob("*.md")):
-                agents.append(parse_claude_agent(af.read_text(encoding="utf-8")))
-        commands_src = bundle / "commands"
-        if commands_src.exists():
-            for cf in sorted(commands_src.glob("*.md")):
-                commands.append(
-                    parse_claude_command(cf.read_text(encoding="utf-8"), cf.stem)
-                )
-        oc_adapter = OpenCodeAdapter()
-        oc_adapter.remove_entries(agents, commands)
+        oc_adapter = get_adapter(TuiKind.OPENCODE)
+        oc_adapter.remove_entries(AGENTS, COMMANDS)
         print(f"  updated: {opencode_root / 'opencode.json'}")
 
     if remove_all:
@@ -1469,7 +1422,7 @@ def update(
             skills_files = _bundle_skills_files(bundle)
             if TuiKind.CLAUDE in tui_targets:
                 expected_claude = skills_files | set(
-                    _compute_tui_relpaths(bundle, ClaudeCodeAdapter())
+                    _compute_tui_relpaths(get_adapter(TuiKind.CLAUDE))
                 )
             else:
                 expected_claude = skills_files
@@ -1488,7 +1441,7 @@ def update(
                     _remove_stale_opencode_files(
                         adapter.install_root(), config_dir, set()
                     )
-                _, relpaths = _install_tui_files(bundle, adapter)
+                _, relpaths = _install_tui_files(adapter)
                 if tui_kind == TuiKind.CLAUDE:
                     claude_tui_files = set(relpaths)
                 else:

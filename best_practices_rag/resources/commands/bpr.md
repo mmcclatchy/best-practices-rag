@@ -1,11 +1,11 @@
-# Best Practices Research
+# BPR
 
-Use this command to search for software engineering best practices, technology integration patterns, framework usage guidance, and library configuration recommendations. Invoke as `/bp <query>`.
+Use this command to conduct in-depth research on software engineering topics, focusing on architectural rationale, design tradeoffs, and deep technical understanding. Invoke as `/bpr <query>`.
 
 ## Usage
 
 ```text
-/bp $ARGUMENTS
+/bpr $ARGUMENTS
 ```
 
 ## Configuration
@@ -23,7 +23,7 @@ Parse `$ARGUMENTS`. Identify:
 - Technology names (e.g., `fastapi`, `sqlalchemy`, `neo4j`)
 - Topic keywords (e.g., `async`, `session management`, `connection pooling`)
 - Language names if mentioned (e.g., `python`)
-- `--force-refresh` flag — if present, skip Steps 3-4 entirely and proceed directly to Step 5. Remove the flag from the query before using `$ARGUMENTS` elsewhere.
+- `--force-refresh` flag — if present, skip Steps 3-4 entirely and proceed directly to the gap path (Step 5). Remove the flag from the query before using `$ARGUMENTS` elsewhere.
 
 **Language classification** (skip if the user explicitly named a language above):
 
@@ -48,20 +48,19 @@ Parse `$ARGUMENTS`. Identify:
 
 ### Step 2 — Look up current versions
 
-```bash
-best-practices-rag lookup-versions --tech "<comma-separated tech names from Step 1>"
-```
+Read `~/.claude/skills/best-practices-rag/references/tech-versions.md`.
 
-Parse the JSON:
-- `tech_versions` → use directly as `TECH_VERSIONS_JSON` for Step 5
-- `cutoff_date` → use as `CUTOFF_DATE`
-- Technologies in `not_found` have no version entry — they are already absent from `tech_versions`
-- If `tech_versions` is empty (no technologies found), `cutoff_date` defaults to `(current year - 2)-01-01`
+For each technology identified in Step 1:
+- Note the current version to append to Exa queries (e.g., `"FastAPI 0.116"`)
+- Note the Release Date to derive `--cutoff-date` (format: `YYYY-01-01`)
+- Record the full `{tech: version}` mapping as `TECH_VERSIONS_JSON` for use in Step 5
+- If a technology is NOT found in the table, omit it from `TECH_VERSIONS_JSON` entirely — do not use `"latest"`, `"unknown"`, or any placeholder string
+- If NO technologies are found in the table, set `TECH_VERSIONS_JSON` to `{}`; derive `--cutoff-date` as `(current year - 2)-01-01`
 
 Compute the output file path:
 
 ```bash
-best-practices-rag generate-slug --tech "<comma-separated tech names>" --topics "<comma-separated topic keywords>"
+uv run best-practices-rag generate-slug --tech "<comma-separated tech names>" --topics "<comma-separated topic keywords>" --mode research
 ```
 
 - `OUTPUT_SLUG` = stdout from the command above
@@ -72,7 +71,7 @@ best-practices-rag generate-slug --tech "<comma-separated tech names>" --topics 
 If `--force-refresh` was set in Step 1, skip this step.
 
 ```bash
-best-practices-rag check-file-cache \
+uv run ./.claude/skills/best-practices-rag/scripts/check_file_cache.py \
   --file "<OUTPUT_FILE from Step 2>" \
   --model "<your model ID, e.g. claude-sonnet-4-6>"
 ```
@@ -89,16 +88,11 @@ If `hit` is `false`, continue to Step 3.
 If `--force-refresh` was set in Step 1, skip this step and Step 4 entirely. Set `staleness_reason` to `"force_refresh"` and proceed to Step 5.
 
 ```bash
-best-practices-rag query-kb \
+uv run ./.claude/skills/best-practices-rag/scripts/query_kb.py \
   --tech "<comma-separated tech names>" \
   --topics "<comma-separated topic keywords>" \
   [--languages "<comma-separated language names>"]
 ```
-
-If `query-kb` exits with a non-zero exit code, check stdout for a JSON `"error"` field.
-If the error contains `"neo4j_unavailable"`, tell the user:
-"Neo4j is unreachable. Check that Docker is running and credentials are correct (`best-practices-rag check`)."
-Then stop — do not proceed to Step 4 or Step 5.
 
 Parse the JSON from stdout: `{ "count": N, "results": [...], "summary": "..." }`.
 
@@ -139,7 +133,7 @@ Delegate to the `bp-pipeline` agent using Task:
 
 ```text
 Task(bp-pipeline):
-MODE: codegen
+MODE: research
 TECH: <comma-separated tech names from Step 1>
 QUERY: $ARGUMENTS
 TECH_VERSIONS_JSON: <JSON string from Step 2, e.g. {"fastapi":"0.116","sqlalchemy":"2.0"}>
@@ -165,19 +159,11 @@ BP_PIPELINE_COMPLETE. Output: <OUTPUT_FILE>. Extra: <EXTRA_TECHS>. KB_Stored: <t
 
 If bp-pipeline output does NOT contain `BP_PIPELINE_COMPLETE`, surface a clear error to the user: "bp-pipeline did not return a completion signal. Check bp-pipeline output for errors." Do not silently continue.
 
-Parse the signal:
-- `OUTPUT_FILE` from the `Output:` field (use this path for Step 6 — do not reuse the path computed in Step 2)
-- `EXTRA_TECHS_FROM_PIPELINE` from the `Extra:` field (comma-separated string, may be empty)
+Parse the `Output:` field from the signal and use that path for Step 6.
 
 ### Step 6 — Output to user
 
 Tell the user the output file path: `OUTPUT_FILE` (from the bp-pipeline completion signal). Do not read or print the file contents.
-
-If `EXTRA_TECHS_FROM_PIPELINE` is non-empty, append this note:
-
-> **Note:** These results cover [EXTRA_TECHS_FROM_PIPELINE joined by " + "] in addition to what you queried. This
-> document assumes [EXTRA_TECHS_FROM_PIPELINE] as the implementation layer. Re-run with explicit technology names
-> (e.g., `/bp fastapi redis async session`) for different patterns.
 
 ## References
 

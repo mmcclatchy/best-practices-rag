@@ -1,11 +1,3 @@
----
-name: bp-pipeline
-description: Full gap-fill and synthesis pipeline for best-practices-rag. Invoke via Task(bp-pipeline) when /bp or /bpr detects a knowledge-base gap (full or partial) or on a cache hit that still needs synthesis. Runs Exa searches, context7 documentation fetches, stores the gap result to Neo4j, then queries the KB and synthesizes the final MODE-appropriate output document. Returns BP_PIPELINE_COMPLETE signal with the output file path.
-tools: Bash, mcp__context7__resolve-library-id, mcp__context7__query-docs, Read, Write
-model: sonnet
-color: green
----
-
 # bp-pipeline
 
 Unified gap-fill and synthesis subagent for the best-practices-rag pipeline. Combines the full workflow of bp-gap-handler (Steps 0–6: Exa search, context7 fetch, research synthesis, KB storage) with bp-synthesizer (Step 7: MODE-selective final synthesis from KB) into a single ephemeral invocation. Returns only a structured completion signal — all large-data operations live exclusively in this ephemeral context.
@@ -87,7 +79,7 @@ Run all three Bash calls simultaneously (parallel execution). Use `SEARCH_TECH` 
 **Primary search:**
 
 ```bash
-best-practices-rag search-exa \
+uv run best-practices-rag search-exa \
   --query "<PRIMARY_QUERY>" \
   --cutoff-date "<CUTOFF_DATE>" \
   --output-file /tmp/bp_exa_primary.md
@@ -96,7 +88,7 @@ best-practices-rag search-exa \
 **Failure-mode search:**
 
 ```bash
-best-practices-rag search-exa \
+uv run best-practices-rag search-exa \
   --query "<PRIMARY_QUERY> pitfalls gotchas production issues" \
   --cutoff-date "<CUTOFF_DATE>" \
   --output-file /tmp/bp_exa_failures.md
@@ -105,7 +97,7 @@ best-practices-rag search-exa \
 **Authority search** — targets GitHub Issues/Discussions/READMEs where library authors post design rationale and recommended approaches:
 
 ```bash
-best-practices-rag search-exa \
+uv run best-practices-rag search-exa \
   --query "<TECH as space-separated names> <core topic from QUERY> recommended approach design decision rationale" \
   --category github \
   --cutoff-date "<CUTOFF_DATE>" \
@@ -114,13 +106,15 @@ best-practices-rag search-exa \
 
 Construct the authority query by combining the TECH names (space-separated, not comma-separated) with the core topic extracted from QUERY, then appending the fixed phrase `recommended approach design decision rationale`. Example for `TECH=fastapi,sqlalchemy` and `QUERY=async session management`: `"fastapi sqlalchemy async session management recommended approach design decision rationale"`.
 
-Each search writes its results as markdown to a file via `--output-file`. After all three complete:
+Each search writes its results as markdown to a file via `--output-file`. After all three complete (regardless of exit code — a non-zero exit means the results file is empty, not that the pipeline should stop):
 
 1. Read(`/tmp/bp_exa_primary.md`) — primary search results
 2. Read(`/tmp/bp_exa_failures.md`) — failure-mode results
 3. Read(`/tmp/bp_exa_authority.md`) — authority results
 
-The markdown is directly readable — no JSON parsing needed. Collect `SOURCE_URLS` from the `=== RESULT: <url> ===` headers. Retain all content in context for Step 4.
+The markdown is directly readable — no JSON parsing needed. Collect `SOURCE_URLS` from the `=== RESULT: <url> ===` headers. Retain all content in context for Step 4. If a file is empty, collect zero URLs from it and continue normally.
+
+**URL deduplication:** After reading all three result files, identify URLs appearing in more than one search. Keep only the first occurrence (priority: primary > failure-mode > authority) and discard duplicates. Update SOURCE_URLS to the deduplicated set.
 
 **Source tier tagging:** Classify each collected URL into a quality tier and build `SOURCE_TIERS` (a JSON object mapping URL → tier string):
 
@@ -149,7 +143,7 @@ Retain all retrieved documentation content in this ephemeral context.
 
 ### Step 3 — Read synthesis format
 
-Always read `~/.claude/skills/best-practices-rag/references/synthesis-format-research.md` regardless of MODE.
+Always read `./.claude/skills/best-practices-rag/references/synthesis-format-research.md` regardless of MODE.
 
 Storing in research format ensures the richer content (architectural rationale, design tradeoffs, in-depth analysis) is available for downstream synthesis. MODE is retained in the input interface for informational context but no longer drives format selection here.
 
@@ -197,7 +191,7 @@ Write the synthesized document to `OUTPUT_FILE` (the workspace-relative path sup
 Call `store_result.py` via Bash. Use `STORE_TECH` (from Step 0) as the `--tech` value — this ensures the gap-filled content is stored as a separate KB node scoped to the uncovered technologies, allowing the synthesizer to retrieve and merge both nodes independently:
 
 ```bash
-best-practices-rag store-result \
+uv run best-practices-rag store-result \
   --tech "<STORE_TECH value>" \
   --query "<QUERY value>" \
   --content-file "<OUTPUT_FILE value>" \
@@ -216,7 +210,7 @@ Steps 0–6 are complete. Proceed to Step 7 for MODE-selective final synthesis.
 Run the query command:
 
 ```bash
-best-practices-rag query-kb \
+uv run best-practices-rag query-kb \
   --tech "<TECH value>" \
   --topics "<TOPICS value>" \
   [--languages "<LANGUAGES value>"] \
@@ -231,8 +225,8 @@ Collect all entries with `STATUS: fresh` as FRESH_DOCS. If no fresh entries exis
 entries as candidates regardless of staleness.
 
 **Select synthesis format:**
-- If `MODE` is `codegen`, read `~/.claude/skills/best-practices-rag/references/synthesis-format-codegen.md`
-- If `MODE` is `research`, read `~/.claude/skills/best-practices-rag/references/synthesis-format-research.md`
+- If `MODE` is `codegen`, read `./.claude/skills/best-practices-rag/references/synthesis-format-codegen.md`
+- If `MODE` is `research`, read `./.claude/skills/best-practices-rag/references/synthesis-format-research.md`
 
 The selected format document defines the required sections, target length, and mode-specific rules.
 

@@ -15,6 +15,7 @@ from best_practices_rag.global_config import (
     load_api_key,
     save_api_key,
     save_global_models,
+    GLOBAL_MODELS_PATH,
 )
 from best_practices_rag.ui.console import (
     console,
@@ -460,4 +461,4 @@ def _interactive_override(
 
 
 def _config_path() -> str:
-    return str(Path.home() / ".config" / "best-practices-rag" / "models.json")
+    return str(GLOBAL_MODELS_PATH)

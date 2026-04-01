@@ -3,39 +3,49 @@
 import json
 import shutil
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from best_practices_rag.global_config import load_global_models
+from pydantic import BaseModel, ConfigDict
 
-@dataclass(frozen=True)
-class AgentSpec:
+
+class TuiKind(StrEnum):
+    CLAUDE = "claude"
+    OPENCODE = "opencode"
+
+
+class ModelType(StrEnum):
+    REASONING = "reasoning"
+    TASK = "task"
+
+
+class ModelConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    reasoning_model: str
+    task_model: str
+
+
+class AgentSpec(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     name: str
     description: str
-    model: str
+    model_type: ModelType
     tools: list[str]
     body: str
     color: str | None = None
 
 
-@dataclass(frozen=True)
-class CommandSpec:
+class CommandSpec(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     name: str
     description: str
     body: str
 
-
-class TuiKind(str, Enum):
-    CLAUDE = "claude"
-    OPENCODE = "opencode"
-
-
-_MODEL_MAP: dict[str, str] = {
-    "opus": "opencode-go/glm-5",
-    "sonnet": "opencode-go/minimax-m2.7",
-    "haiku": "opencode-go/minimax-m2.5",
-}
 
 _BUILTIN_TOOL_MAP: dict[str, str] = {
     "Read": "read",
@@ -53,6 +63,25 @@ _BUILTIN_TOOL_MAP: dict[str, str] = {
 
 
 class TuiAdapter(ABC):
+    def __init__(self, config: ModelConfig) -> None:
+        self._config = config
+
+    @property
+    def reasoning_model(self) -> str:
+        return self._config.reasoning_model
+
+    @property
+    def task_model(self) -> str:
+        return self._config.task_model
+
+    @classmethod
+    @abstractmethod
+    def get_default_config(cls) -> ModelConfig: ...
+
+    @classmethod
+    @abstractmethod
+    def detect_installed(cls) -> bool: ...
+
     @abstractmethod
     def install_root(self) -> Path: ...
 
@@ -76,17 +105,48 @@ class TuiAdapter(ABC):
     ) -> list[Path]: ...
 
     @abstractmethod
-    def model_name(self, short_name: str) -> str: ...
-
-    @abstractmethod
     def installed_file_relpaths(
         self,
         agents: list[AgentSpec],
         commands: list[CommandSpec],
     ) -> list[str]: ...
 
+    def _load_agent_body(self, filename: str) -> str:
+        template_dir = Path(__file__).parent / "resources" / "agents"
+        return (template_dir / filename).read_text(encoding="utf-8")
+
+    def _load_command_body(self, filename: str) -> str:
+        template_dir = Path(__file__).parent / "resources" / "commands"
+        return (template_dir / filename).read_text(encoding="utf-8")
+
+    def remove_entries(
+        self,
+        agents: list[AgentSpec],
+        commands: list[CommandSpec],
+    ) -> None:
+        """Remove agent and command entries from config. Override for TUI-specific behavior."""
+        pass
+
 
 class ClaudeCodeAdapter(TuiAdapter):
+    _AGENT_TEMPLATE = """---
+name: {name}
+description: {description}
+model: {model}
+tools: {tools}
+color: {color}
+---
+
+{body}"""
+
+    @classmethod
+    def get_default_config(cls) -> ModelConfig:
+        return ModelConfig(reasoning_model="opus", task_model="sonnet")
+
+    @classmethod
+    def detect_installed(cls) -> bool:
+        return shutil.which("claude") is not None
+
     def install_root(self) -> Path:
         return Path.home() / ".claude"
 
@@ -96,24 +156,25 @@ class ClaudeCodeAdapter(TuiAdapter):
     def commands_dir(self) -> Path:
         return self.install_root() / "commands"
 
-    def model_name(self, short_name: str) -> str:
-        return short_name
-
     def render_agent(self, spec: AgentSpec) -> str:
-        parts = [
-            "---",
-            f"name: {spec.name}",
-            f"description: {spec.description}",
-            f"model: {self.model_name(spec.model)}",
-        ]
-        if spec.color:
-            parts.append(f"color: {spec.color}")
-        parts.append(f"tools: {', '.join(spec.tools)}")
-        parts.append("---")
-        return "\n".join(parts) + "\n\n" + spec.body
+        body = self._load_agent_body(spec.body)
+        model = (
+            self.task_model
+            if spec.model_type == ModelType.TASK
+            else self.reasoning_model
+        )
+        color = spec.color or ""
+        return self._AGENT_TEMPLATE.format(
+            name=spec.name,
+            description=spec.description,
+            model=model,
+            tools=", ".join(spec.tools),
+            color=color,
+            body=body,
+        )
 
     def render_command(self, spec: CommandSpec) -> str:
-        return spec.body
+        return self._load_command_body(spec.body)
 
     def write_all(
         self,
@@ -155,6 +216,21 @@ class ClaudeCodeAdapter(TuiAdapter):
 
 
 class OpenCodeAdapter(TuiAdapter):
+    @classmethod
+    def get_default_config(cls) -> ModelConfig:
+        models = load_global_models()
+        return ModelConfig(
+            reasoning_model=models.get("reasoning", "anthropic/claude-opus-4-6"),
+            task_model=models.get("task", "anthropic/claude-sonnet-4-6"),
+        )
+
+    @classmethod
+    def detect_installed(cls) -> bool:
+        return (
+            shutil.which("opencode") is not None
+            or (Path.home() / ".opencode" / "bin" / "opencode").exists()
+        )
+
     def install_root(self) -> Path:
         return Path.home() / ".config" / "opencode"
 
@@ -164,14 +240,11 @@ class OpenCodeAdapter(TuiAdapter):
     def commands_dir(self) -> Path:
         return self.install_root() / "prompts"
 
-    def model_name(self, short_name: str) -> str:
-        return _MODEL_MAP.get(short_name, f"anthropic/claude-{short_name}")
-
     def render_agent(self, spec: AgentSpec) -> str:
-        return spec.body
+        return self._load_agent_body(spec.body)
 
     def render_command(self, spec: CommandSpec) -> str:
-        return spec.body
+        return self._load_command_body(spec.body)
 
     def write_all(
         self,
@@ -260,11 +333,16 @@ class OpenCodeAdapter(TuiAdapter):
         command_block: dict[str, Any] = existing.setdefault("command", {})
 
         for spec in agents:
+            model = (
+                self.task_model
+                if spec.model_type == ModelType.TASK
+                else self.reasoning_model
+            )
             entry: dict[str, Any] = {
                 "description": spec.description,
                 "mode": "subagent",
                 "hidden": True,
-                "model": self.model_name(spec.model),
+                "model": model,
                 "prompt": f"{{file:prompts/{spec.name}.md}}",
             }
             tools_block = self._build_tools_block(spec.tools)
@@ -292,22 +370,24 @@ class OpenCodeAdapter(TuiAdapter):
         return result
 
 
+_ADAPTER_REGISTRY: dict[TuiKind, type[TuiAdapter]] = {
+    TuiKind.CLAUDE: ClaudeCodeAdapter,
+    TuiKind.OPENCODE: OpenCodeAdapter,
+}
+
+
+def register_adapter(kind: TuiKind, adapter_class: type[TuiAdapter]) -> None:
+    _ADAPTER_REGISTRY[kind] = adapter_class
+
+
 def get_adapter(kind: TuiKind) -> TuiAdapter:
-    if kind == TuiKind.CLAUDE:
-        return ClaudeCodeAdapter()
-    return OpenCodeAdapter()
+    adapter_class = _ADAPTER_REGISTRY[kind]
+    config = adapter_class.get_default_config()
+    return adapter_class(config)
 
 
 def detect_tuis() -> list[TuiKind]:
-    result: list[TuiKind] = []
-    if shutil.which("claude"):
-        result.append(TuiKind.CLAUDE)
-    if (
-        shutil.which("opencode")
-        or (Path.home() / ".opencode" / "bin" / "opencode").exists()
-    ):
-        result.append(TuiKind.OPENCODE)
-    return result
+    return [kind for kind, cls in _ADAPTER_REGISTRY.items() if cls.detect_installed()]
 
 
 def resolve_tui_targets(tui: str) -> list[TuiKind]:
@@ -326,53 +406,3 @@ def resolve_tui_targets(tui: str) -> list[TuiKind]:
         return [TuiKind.OPENCODE]
     detected = detect_tuis()
     return detected if detected else [TuiKind.CLAUDE]
-
-
-def parse_claude_agent(text: str) -> AgentSpec:
-    if not text.startswith("---"):
-        raise ValueError("Agent file missing YAML frontmatter")
-    end = text.find("---", 3)
-    if end == -1:
-        raise ValueError("Agent file has unclosed frontmatter")
-
-    block = text[3:end].strip()
-    fm: dict[str, str] = {}
-    for line in block.splitlines():
-        if ":" in line:
-            key, _, value = line.partition(":")
-            fm[key.strip()] = value.strip()
-
-    body = text[end + 3 :].lstrip("\n")
-    tools_raw = fm.get("tools", "")
-    tools = [t.strip() for t in tools_raw.split(",") if t.strip()] if tools_raw else []
-
-    return AgentSpec(
-        name=fm.get("name", ""),
-        description=fm.get("description", ""),
-        model=fm.get("model", "sonnet"),
-        tools=tools,
-        body=body,
-        color=fm.get("color") or None,
-    )
-
-
-def parse_claude_command(text: str, name: str) -> CommandSpec:
-    """Parse a Claude Code command file into a CommandSpec.
-
-    Extracts description from the first H1 heading; strips YAML frontmatter if present.
-    """
-    description = name  # fallback
-
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("# "):
-            description = stripped[2:].strip()
-            break
-
-    body = text
-    if text.startswith("---"):
-        end = text.find("---", 3)
-        if end != -1:
-            body = text[end + 3 :].lstrip("\n")
-
-    return CommandSpec(name=name, description=description, body=body)

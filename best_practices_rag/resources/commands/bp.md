@@ -60,7 +60,7 @@ For each technology identified in Step 1:
 Compute the output file path:
 
 ```bash
-uv run best-practices-rag generate-slug --tech "<comma-separated tech names>" --topics "<comma-separated topic keywords>"
+best-practices-rag generate-slug --tech "<comma-separated tech names>" --topics "<comma-separated topic keywords>"
 ```
 
 - `OUTPUT_SLUG` = stdout from the command above
@@ -71,7 +71,7 @@ uv run best-practices-rag generate-slug --tech "<comma-separated tech names>" --
 If `--force-refresh` was set in Step 1, skip this step.
 
 ```bash
-uv run ./.claude/skills/best-practices-rag/scripts/check_file_cache.py \
+uv run ~/.claude/skills/best-practices-rag/scripts/check_file_cache.py \
   --file "<OUTPUT_FILE from Step 2>" \
   --model "<your model ID, e.g. claude-sonnet-4-6>"
 ```
@@ -88,7 +88,7 @@ If `hit` is `false`, continue to Step 3.
 If `--force-refresh` was set in Step 1, skip this step and Step 4 entirely. Set `staleness_reason` to `"force_refresh"` and proceed to Step 5.
 
 ```bash
-uv run ./.claude/skills/best-practices-rag/scripts/query_kb.py \
+uv run ~/.claude/skills/best-practices-rag/scripts/query_kb.py \
   --tech "<comma-separated tech names>" \
   --topics "<comma-separated topic keywords>" \
   [--languages "<comma-separated language names>"]

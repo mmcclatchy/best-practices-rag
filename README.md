@@ -206,4 +206,4 @@ Install `uv` and `best-practices-rag` from inside the WSL2 terminal using the Li
 
 ## Version
 
-v0.2.5
+v0.2.6

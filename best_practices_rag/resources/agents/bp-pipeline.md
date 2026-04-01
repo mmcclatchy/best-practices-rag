@@ -79,7 +79,7 @@ Run all three Bash calls simultaneously (parallel execution). Use `SEARCH_TECH` 
 **Primary search:**
 
 ```bash
-uv run best-practices-rag search-exa \
+best-practices-rag search-exa \
   --query "<PRIMARY_QUERY>" \
   --cutoff-date "<CUTOFF_DATE>" \
   --output-file /tmp/bp_exa_primary.md
@@ -88,7 +88,7 @@ uv run best-practices-rag search-exa \
 **Failure-mode search:**
 
 ```bash
-uv run best-practices-rag search-exa \
+best-practices-rag search-exa \
   --query "<PRIMARY_QUERY> pitfalls gotchas production issues" \
   --cutoff-date "<CUTOFF_DATE>" \
   --output-file /tmp/bp_exa_failures.md
@@ -97,7 +97,7 @@ uv run best-practices-rag search-exa \
 **Authority search** — targets GitHub Issues/Discussions/READMEs where library authors post design rationale and recommended approaches:
 
 ```bash
-uv run best-practices-rag search-exa \
+best-practices-rag search-exa \
   --query "<TECH as space-separated names> <core topic from QUERY> recommended approach design decision rationale" \
   --category github \
   --cutoff-date "<CUTOFF_DATE>" \
@@ -143,7 +143,7 @@ Retain all retrieved documentation content in this ephemeral context.
 
 ### Step 3 — Read synthesis format
 
-Always read `./.claude/skills/best-practices-rag/references/synthesis-format-research.md` regardless of MODE.
+Always read `~/.claude/skills/best-practices-rag/references/synthesis-format-research.md` regardless of MODE.
 
 Storing in research format ensures the richer content (architectural rationale, design tradeoffs, in-depth analysis) is available for downstream synthesis. MODE is retained in the input interface for informational context but no longer drives format selection here.
 
@@ -191,7 +191,7 @@ Write the synthesized document to `OUTPUT_FILE` (the workspace-relative path sup
 Call `store_result.py` via Bash. Use `STORE_TECH` (from Step 0) as the `--tech` value — this ensures the gap-filled content is stored as a separate KB node scoped to the uncovered technologies, allowing the synthesizer to retrieve and merge both nodes independently:
 
 ```bash
-uv run best-practices-rag store-result \
+best-practices-rag store-result \
   --tech "<STORE_TECH value>" \
   --query "<QUERY value>" \
   --content-file "<OUTPUT_FILE value>" \
@@ -210,7 +210,7 @@ Steps 0–6 are complete. Proceed to Step 7 for MODE-selective final synthesis.
 Run the query command:
 
 ```bash
-uv run best-practices-rag query-kb \
+best-practices-rag query-kb \
   --tech "<TECH value>" \
   --topics "<TOPICS value>" \
   [--languages "<LANGUAGES value>"] \
@@ -225,8 +225,8 @@ Collect all entries with `STATUS: fresh` as FRESH_DOCS. If no fresh entries exis
 entries as candidates regardless of staleness.
 
 **Select synthesis format:**
-- If `MODE` is `codegen`, read `./.claude/skills/best-practices-rag/references/synthesis-format-codegen.md`
-- If `MODE` is `research`, read `./.claude/skills/best-practices-rag/references/synthesis-format-research.md`
+- If `MODE` is `codegen`, read `~/.claude/skills/best-practices-rag/references/synthesis-format-codegen.md`
+- If `MODE` is `research`, read `~/.claude/skills/best-practices-rag/references/synthesis-format-research.md`
 
 The selected format document defines the required sections, target length, and mode-specific rules.
 

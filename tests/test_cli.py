@@ -370,7 +370,7 @@ def test_setup_opencode_creates_prompts_and_json(
     assert "bp-pipeline" in config["agent"]
     assert "bp" in config["command"]
     assert config["agent"]["bp-pipeline"]["mode"] == "subagent"
-    assert config["agent"]["bp-pipeline"]["model"] == "anthropic/claude-sonnet-4-6"
+    assert config["agent"]["bp-pipeline"]["model"] == "opencode-go/minimax-m2.7"
 
 
 def test_setup_opencode_writes_manifest(

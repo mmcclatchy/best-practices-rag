@@ -181,9 +181,9 @@ class TestOpenCodeAdapter:
 
     def test_model_name_mapping(self) -> None:
         adapter = OpenCodeAdapter()
-        assert adapter.model_name("sonnet") == "anthropic/claude-sonnet-4-6"
-        assert adapter.model_name("opus") == "anthropic/claude-opus-4-6"
-        assert adapter.model_name("haiku") == "anthropic/claude-haiku-4-5"
+        assert adapter.model_name("sonnet") == "opencode-go/minimax-m2.7"
+        assert adapter.model_name("opus") == "opencode-go/glm-5"
+        assert adapter.model_name("haiku") == "opencode-go/minimax-m2.5"
 
     def test_model_name_fallback(self) -> None:
         assert OpenCodeAdapter().model_name("unknown") == "anthropic/claude-unknown"
@@ -249,7 +249,7 @@ class TestOpenCodeAdapter:
         agent = config["agent"]["bp-pipeline"]
         assert agent["mode"] == "subagent"
         assert agent["hidden"] is True
-        assert agent["model"] == "anthropic/claude-sonnet-4-6"
+        assert agent["model"] == "opencode-go/minimax-m2.7"
         assert agent["prompt"] == "{file:prompts/bp-pipeline.md}"
         assert agent["tools"]["bash"] is True
 
@@ -265,9 +265,7 @@ class TestOpenCodeAdapter:
         opencode_dir.mkdir(parents=True)
         existing = {
             "$schema": "https://opencode.ai/config.json",
-            "agent": {
-                "user-agent": {"mode": "primary", "model": "anthropic/claude-opus-4-6"}
-            },
+            "agent": {"user-agent": {"mode": "primary", "model": "opencode-go/glm-5"}},
             "command": {"user-cmd": {"template": "user template"}},
             "mcp": {"my-server": {"type": "local"}},
         }

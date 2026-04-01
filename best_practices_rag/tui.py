@@ -32,9 +32,9 @@ class TuiKind(str, Enum):
 
 
 _MODEL_MAP: dict[str, str] = {
-    "opus": "anthropic/claude-opus-4-6",
-    "sonnet": "anthropic/claude-sonnet-4-6",
-    "haiku": "anthropic/claude-haiku-4-5",
+    "opus": "opencode-go/glm-5",
+    "sonnet": "opencode-go/minimax-m2.7",
+    "haiku": "opencode-go/minimax-m2.5",
 }
 
 _BUILTIN_TOOL_MAP: dict[str, str] = {

@@ -31,12 +31,6 @@ _CACHE_DIR = Path.home() / ".config" / "best-practices-rag" / "cache"
 _CACHE_TTL_SECONDS = 12 * 60 * 60
 
 
-app = typer.Typer(
-    name="opencode-model",
-    help="Sync OpenCode model tier mapping using benchmarks",
-)
-
-
 def _read_cache(name: str) -> dict | None:
     path = _CACHE_DIR / f"{name}.json"
     if not path.exists():
@@ -69,8 +63,7 @@ def _clear_cache() -> None:
 _REASONING_INDEX = "artificial_analysis_intelligence_index"
 
 
-@app.command()
-def sync(
+def run(
     yes: bool = typer.Option(
         False, "--yes", "-y", help="Accept recommended mapping without prompting"
     ),
@@ -88,7 +81,7 @@ def sync(
     no_cache: bool = typer.Option(
         False, "--no-cache", help="Bypass cached API responses"
     ),
-) -> None:
+) -> int:
     aa_key_val = (
         aa_key
         or os.environ.get("ARTIFICIAL_ANALYSIS_API_KEY", "")
@@ -110,7 +103,7 @@ def sync(
         print_error(
             "No OpenCode models found. Ensure opencode is installed and configured."
         )
-        raise typer.Exit(1)
+        return 1
 
     console.print(f"Provider: [cyan]{provider}[/cyan]")
     console.print(f"Available models: {', '.join(models)}\n")
@@ -154,7 +147,7 @@ def sync(
         mapping = _interactive_override(suggestion, scored_by_tier)
         if mapping is None:
             print_warning("Mapping not saved")
-            raise typer.Exit(1)
+            return 1
 
     save_global_models(mapping)
     console.print(
@@ -163,6 +156,7 @@ def sync(
     print_info(
         "Run 'best-practices-rag setup --tui opencode' to apply new models to your config"
     )
+    return 0
 
 
 def _discover_models() -> tuple[str, list[str]]:

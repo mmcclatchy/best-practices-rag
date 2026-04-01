@@ -28,7 +28,6 @@ from best_practices_rag.logging_setup import configure_skill_logging, _resolve_l
 from best_practices_rag.parser import build_synthesized_bundle
 from best_practices_rag.search import ExaSearchError, search_best_practices
 from best_practices_rag.setup_schema import run_migrations
-from best_practices_rag.commands import opencode_model
 from best_practices_rag.staleness import (
     check_staleness,
     load_current_versions,
@@ -47,6 +46,9 @@ from best_practices_rag.tui import (
     parse_claude_command,
     resolve_tui_targets,
 )
+
+
+from best_practices_rag.commands.opencode_model import run
 
 
 app = typer.Typer(
@@ -1564,7 +1566,31 @@ def logs(
         subprocess.run(["tail", f"-{lines}", str(log_file)])
 
 
-app.add_typer(opencode_model.app, name="opencode-model")
+@app.command(
+    name="opencode-models", help="Sync OpenCode model tier mapping using benchmarks"
+)
+def _opencode_models(
+    yes: bool = typer.Option(
+        False, "--yes", "-y", help="Accept recommended mapping without prompting"
+    ),
+    aa_key: str | None = typer.Option(
+        None,
+        "--aa-key",
+        help="Artificial Analysis API key (overrides ARTIFICIAL_ANALYSIS_API_KEY env var)",
+    ),
+    exa_key: str | None = typer.Option(
+        None,
+        "--exa-key",
+        help="Exa API key for rate limit lookup (overrides EXA_API_KEY env var)",
+    ),
+    debug: bool = typer.Option(False, "--debug", help="Print debug info for API calls"),
+    no_cache: bool = typer.Option(
+        False, "--no-cache", help="Bypass cached API responses"
+    ),
+) -> None:
+    raise typer.Exit(
+        run(yes=yes, aa_key=aa_key, exa_key=exa_key, debug=debug, no_cache=no_cache)
+    )
 
 
 def main() -> None:

@@ -71,7 +71,7 @@ best-practices-rag generate-slug --tech "<comma-separated tech names>" --topics 
 If `--force-refresh` was set in Step 1, skip this step.
 
 ```bash
-uv run ~/.claude/skills/best-practices-rag/scripts/check_file_cache.py \
+best-practices-rag check-file-cache \
   --file "<OUTPUT_FILE from Step 2>" \
   --model "<your model ID, e.g. claude-sonnet-4-6>"
 ```
@@ -88,7 +88,7 @@ If `hit` is `false`, continue to Step 3.
 If `--force-refresh` was set in Step 1, skip this step and Step 4 entirely. Set `staleness_reason` to `"force_refresh"` and proceed to Step 5.
 
 ```bash
-uv run ~/.claude/skills/best-practices-rag/scripts/query_kb.py \
+best-practices-rag query-kb \
   --tech "<comma-separated tech names>" \
   --topics "<comma-separated topic keywords>" \
   [--languages "<comma-separated language names>"]

@@ -188,7 +188,7 @@ Write the synthesized document to `OUTPUT_FILE` (the workspace-relative path sup
 
 ### Step 6 — Store result
 
-Call `store_result.py` via Bash. Use `STORE_TECH` (from Step 0) as the `--tech` value — this ensures the gap-filled content is stored as a separate KB node scoped to the uncovered technologies, allowing the synthesizer to retrieve and merge both nodes independently:
+Call `best-practices-rag store-result` via Bash. Use `STORE_TECH` (from Step 0) as the `--tech` value — this ensures the gap-filled content is stored as a separate KB node scoped to the uncovered technologies, allowing the synthesizer to retrieve and merge both nodes independently:
 
 ```bash
 best-practices-rag store-result \
@@ -342,7 +342,7 @@ If `COVERED_TECHS` and `ALL_QUERIED_TECHS` were provided in the input:
 If neither field was provided, set `EXTRA_TECHS` to empty string.
 
 Also compute `KB_STORED`:
-- `true` if Steps 0–6 ran and store_result.py was called
+- `true` if Steps 0–6 ran and store-result was called
 - `false` if this was a cache-hit invocation (Steps 0–6 were skipped)
 
 ### Step 8 — Return completion signal

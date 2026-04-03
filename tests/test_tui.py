@@ -7,7 +7,9 @@ import pytest
 
 from best_practices_rag.tui import (
     AgentSpec,
+    BpMode,
     ClaudeCodeAdapter,
+    CodexAdapter,
     CommandSpec,
     ModelConfig,
     ModelType,
@@ -126,24 +128,19 @@ class TestClaudeCodeAdapter:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         config = ModelConfig(reasoning_model="opus", task_model="sonnet")
         adapter = ClaudeCodeAdapter(config)
-        # Create template files that will be loaded
-        agents_dir = tmp_path / "resources" / "agents"
-        agents_dir.mkdir(parents=True)
-        (agents_dir / "bp-pipeline.md").write_text("# bp-pipeline\n\nBody content")
-        commands_dir = tmp_path / "resources" / "commands"
-        commands_dir.mkdir(parents=True)
-        (commands_dir / "bp.md").write_text("# BP\n\nCommand content")
         agents = [
             AgentSpec(
                 name="bp-pipeline",
                 description="Pipeline",
                 model_type=ModelType.TASK,
                 tools=["Bash"],
-                body="bp-pipeline.md",
+                body="# bp-pipeline\n\nBody content",
                 color="green",
             )
         ]
-        commands = [CommandSpec(name="bp", description="Search", body="bp.md")]
+        commands = [
+            CommandSpec(name="bp", description="Search", body="# BP\n\nCommand content")
+        ]
         written = adapter.write_all(agents, commands)
         assert (tmp_path / ".claude" / "agents" / "bp-pipeline.md").exists()
         assert (tmp_path / ".claude" / "commands" / "bp.md").exists()
@@ -158,10 +155,12 @@ class TestClaudeCodeAdapter:
                 description="Pipeline",
                 model_type=ModelType.TASK,
                 tools=["Bash"],
-                body="bp-pipeline.md",
+                body="# bp-pipeline\n\nBody content",
             )
         ]
-        commands = [CommandSpec(name="bp", description="Search", body="bp.md")]
+        commands = [
+            CommandSpec(name="bp", description="Search", body="# BP\n\nCommand content")
+        ]
         relpaths = adapter.installed_file_relpaths(agents, commands)
         assert "agents/bp-pipeline.md" in relpaths
         assert "commands/bp.md" in relpaths
@@ -197,23 +196,16 @@ class TestOpenCodeAdapter:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         config = ModelConfig(reasoning_model="glm-5", task_model="minimax-m2.7")
         adapter = OpenCodeAdapter(config)
-        # Create template files
-        agents_dir = tmp_path / "resources" / "agents"
-        agents_dir.mkdir(parents=True)
-        (agents_dir / "bp-pipeline.md").write_text("Agent body")
-        commands_dir = tmp_path / "resources" / "commands"
-        commands_dir.mkdir(parents=True)
-        (commands_dir / "bp.md").write_text("Command body")
         agents = [
             AgentSpec(
                 name="bp-pipeline",
                 description="Pipeline",
                 model_type=ModelType.TASK,
                 tools=["Bash"],
-                body="bp-pipeline.md",
+                body="Agent body",
             )
         ]
-        commands = [CommandSpec(name="bp", description="Search", body="bp.md")]
+        commands = [CommandSpec(name="bp", description="Search", body="Command body")]
         written = adapter.write_all(agents, commands)
         prompts_dir = tmp_path / ".config" / "opencode" / "prompts"
         assert (prompts_dir / "bp-pipeline.md").exists()
@@ -228,23 +220,16 @@ class TestOpenCodeAdapter:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         config = ModelConfig(reasoning_model="glm-5", task_model="minimax-m2.7")
         adapter = OpenCodeAdapter(config)
-        # Create template files
-        agents_dir = tmp_path / "resources" / "agents"
-        agents_dir.mkdir(parents=True)
-        (agents_dir / "bp-pipeline.md").write_text("Agent body")
-        commands_dir = tmp_path / "resources" / "commands"
-        commands_dir.mkdir(parents=True)
-        (commands_dir / "bp.md").write_text("Command body")
         agents = [
             AgentSpec(
                 name="bp-pipeline",
                 description="Pipeline",
                 model_type=ModelType.TASK,
                 tools=["Bash"],
-                body="bp-pipeline.md",
+                body="Agent body",
             )
         ]
-        commands = [CommandSpec(name="bp", description="Search", body="bp.md")]
+        commands = [CommandSpec(name="bp", description="Search", body="Command body")]
         adapter.write_all(agents, commands)
         config_json = json.loads(
             (tmp_path / ".config" / "opencode" / "opencode.json").read_text()
@@ -274,23 +259,16 @@ class TestOpenCodeAdapter:
             "command": {"user-cmd": {"template": "user template"}},
         }
         (opencode_dir / "opencode.json").write_text(json.dumps(existing))
-        # Create template files
-        agents_dir = tmp_path / "resources" / "agents"
-        agents_dir.mkdir(parents=True)
-        (agents_dir / "bp-pipeline.md").write_text("Agent body")
-        commands_dir = tmp_path / "resources" / "commands"
-        commands_dir.mkdir(parents=True)
-        (commands_dir / "bp.md").write_text("Command body")
         agents = [
             AgentSpec(
                 name="bp-pipeline",
                 description="Pipeline",
                 model_type=ModelType.TASK,
                 tools=[],
-                body="bp-pipeline.md",
+                body="Agent body",
             )
         ]
-        commands = [CommandSpec(name="bp", description="Search", body="bp.md")]
+        commands = [CommandSpec(name="bp", description="Search", body="Command body")]
         adapter.write_all(agents, commands)
         result = json.loads((opencode_dir / "opencode.json").read_text())
         assert "bp-pipeline" in result["agent"]
@@ -324,10 +302,10 @@ class TestOpenCodeAdapter:
                 description="Pipeline",
                 model_type=ModelType.TASK,
                 tools=[],
-                body="bp-pipeline.md",
+                body="Agent body",
             )
         ]
-        commands = [CommandSpec(name="bp", description="Search", body="bp.md")]
+        commands = [CommandSpec(name="bp", description="Search", body="Command body")]
         adapter.remove_entries(agents, commands)
         result = json.loads((opencode_dir / "opencode.json").read_text())
         assert "bp-pipeline" not in result["agent"]
@@ -347,7 +325,7 @@ class TestOpenCodeAdapter:
                 description="Pipeline",
                 model_type=ModelType.TASK,
                 tools=[],
-                body="bp-pipeline.md",
+                body="Agent body",
             )
         ]
         adapter.remove_entries(agents, [])
@@ -366,6 +344,10 @@ class TestAdapterRegistry:
     def test_get_adapter_opencode(self) -> None:
         adapter = get_adapter(TuiKind.OPENCODE)
         assert isinstance(adapter, OpenCodeAdapter)
+
+    def test_get_adapter_codex(self) -> None:
+        adapter = get_adapter(TuiKind.CODEX)
+        assert isinstance(adapter, CodexAdapter)
 
     def test_register_adapter_is_callable(self) -> None:
         assert callable(register_adapter)
@@ -389,10 +371,11 @@ class TestDetectTuis:
 
 
 class TestResolveTuiTargets:
-    def test_both(self) -> None:
-        result = resolve_tui_targets("both")
+    def test_all(self) -> None:
+        result = resolve_tui_targets("all")
         assert TuiKind.CLAUDE in result
         assert TuiKind.OPENCODE in result
+        assert TuiKind.CODEX in result
 
     def test_claude(self) -> None:
         result = resolve_tui_targets("claude")
@@ -402,6 +385,10 @@ class TestResolveTuiTargets:
         result = resolve_tui_targets("opencode")
         assert result == [TuiKind.OPENCODE]
 
+    def test_codex(self) -> None:
+        result = resolve_tui_targets("codex")
+        assert result == [TuiKind.CODEX]
+
     def test_auto(self) -> None:
         result = resolve_tui_targets("auto")
         assert isinstance(result, list)
@@ -410,3 +397,239 @@ class TestResolveTuiTargets:
         monkeypatch.setattr("best_practices_rag.tui.detect_tuis", lambda: [])
         result = resolve_tui_targets("auto")
         assert result == [TuiKind.CLAUDE]
+
+
+# ---------------------------------------------------------------------------
+# BpMode
+# ---------------------------------------------------------------------------
+
+
+class TestBpMode:
+    def test_codegen_value(self) -> None:
+        assert BpMode.CODEGEN == "codegen"
+
+    def test_research_value(self) -> None:
+        assert BpMode.RESEARCH == "research"
+
+    def test_codegen_display_title(self) -> None:
+        assert BpMode.CODEGEN.display_title == "BP"
+
+    def test_research_display_title(self) -> None:
+        assert BpMode.RESEARCH.display_title == "BPR"
+
+    def test_codegen_command_name(self) -> None:
+        assert BpMode.CODEGEN.command_name == "bp"
+
+    def test_research_command_name(self) -> None:
+        assert BpMode.RESEARCH.command_name == "bpr"
+
+    def test_codegen_description(self) -> None:
+        assert (
+            "best-practices" in BpMode.CODEGEN.description.lower()
+            or "knowledge" in BpMode.CODEGEN.description.lower()
+        )
+
+    def test_research_description(self) -> None:
+        assert BpMode.RESEARCH.description == "Force gap-fill and resynthesis"
+
+
+# ---------------------------------------------------------------------------
+# reference_path and render_agent_invocation
+# ---------------------------------------------------------------------------
+
+
+class TestClaudeCodeAdapterReferencePath:
+    def test_reference_path_format(self) -> None:
+        config = ModelConfig(reasoning_model="opus", task_model="sonnet")
+        adapter = ClaudeCodeAdapter(config)
+        result = adapter.reference_path("tech-versions.md")
+        assert result == "~/.config/best-practices-rag/references/tech-versions.md"
+
+    def test_reference_path_synthesis_research(self) -> None:
+        config = ModelConfig(reasoning_model="opus", task_model="sonnet")
+        adapter = ClaudeCodeAdapter(config)
+        result = adapter.reference_path("synthesis-format-research.md")
+        assert (
+            result
+            == "~/.config/best-practices-rag/references/synthesis-format-research.md"
+        )
+
+    def test_render_agent_invocation_format(self) -> None:
+        config = ModelConfig(reasoning_model="opus", task_model="sonnet")
+        adapter = ClaudeCodeAdapter(config)
+        result = adapter.render_agent_invocation(
+            agent_name="bp-pipeline",
+            description="run pipeline",
+            params=[("MODE", "codegen"), ("TECH", "fastapi")],
+        )
+        assert "Task(bp-pipeline):" in result
+        assert "MODE: codegen" in result
+        assert "TECH: fastapi" in result
+        assert result.startswith("```text\n")
+        assert result.endswith("```")
+
+    def test_render_agent_invocation_empty_params(self) -> None:
+        config = ModelConfig(reasoning_model="opus", task_model="sonnet")
+        adapter = ClaudeCodeAdapter(config)
+        result = adapter.render_agent_invocation(
+            agent_name="test-agent",
+            description="test",
+            params=[],
+        )
+        assert "Task(test-agent):" in result
+
+
+class TestOpenCodeAdapterReferencePath:
+    def test_reference_path_format(self) -> None:
+        config = ModelConfig(reasoning_model="glm-5", task_model="minimax-m2.7")
+        adapter = OpenCodeAdapter(config)
+        result = adapter.reference_path("tech-versions.md")
+        assert result == "~/.config/best-practices-rag/references/tech-versions.md"
+
+    def test_render_agent_invocation_format(self) -> None:
+        config = ModelConfig(reasoning_model="glm-5", task_model="minimax-m2.7")
+        adapter = OpenCodeAdapter(config)
+        result = adapter.render_agent_invocation(
+            agent_name="bp-pipeline",
+            description="run pipeline",
+            params=[("MODE", "research")],
+        )
+        assert "Task(bp-pipeline):" in result
+        assert "MODE: research" in result
+
+
+# ---------------------------------------------------------------------------
+# CodexAdapter
+# ---------------------------------------------------------------------------
+
+
+def _make_codex_adapter(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> CodexAdapter:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    config = ModelConfig(reasoning_model="o4-mini", task_model="o4-mini")
+    return CodexAdapter(config)
+
+
+def _sample_agents() -> list[AgentSpec]:
+    return [
+        AgentSpec(
+            name="bp-pipeline",
+            description="Run the best-practices pipeline",
+            model_type=ModelType.TASK,
+            tools=["Bash"],
+            body="# bp-pipeline body",
+        )
+    ]
+
+
+def _sample_commands() -> list[CommandSpec]:
+    return [CommandSpec(name="bp", description="Search best practices", body="# BP body")]
+
+
+class TestCodexAdapter:
+    def test_install_root(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        adapter = _make_codex_adapter(tmp_path, monkeypatch)
+        assert adapter.install_root() == tmp_path / ".codex"
+
+    def test_agents_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        adapter = _make_codex_adapter(tmp_path, monkeypatch)
+        assert adapter.agents_dir() == tmp_path / ".codex" / "skills"
+
+    def test_commands_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        adapter = _make_codex_adapter(tmp_path, monkeypatch)
+        assert adapter.commands_dir() == tmp_path / ".codex" / "skills"
+
+    def test_reference_path_format(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        adapter = _make_codex_adapter(tmp_path, monkeypatch)
+        result = adapter.reference_path("tech-versions.md")
+        assert result == "~/.config/best-practices-rag/references/tech-versions.md"
+
+    def test_render_agent_invocation_contains_invoke(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        adapter = _make_codex_adapter(tmp_path, monkeypatch)
+        result = adapter.render_agent_invocation(
+            agent_name="bp-pipeline",
+            description="run the best-practices pipeline",
+            params=[("MODE", "codegen")],
+        )
+        assert "Invoke the 'bp-pipeline' skill" in result
+
+    def test_render_agent_invocation_no_task_block(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        adapter = _make_codex_adapter(tmp_path, monkeypatch)
+        result = adapter.render_agent_invocation(
+            agent_name="bp-pipeline",
+            description="run the best-practices pipeline",
+            params=[("MODE", "codegen")],
+        )
+        assert "Task(bp-pipeline):" not in result
+
+    def test_render_agent_generates_frontmatter(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        adapter = _make_codex_adapter(tmp_path, monkeypatch)
+        spec = AgentSpec(
+            name="bp-pipeline",
+            description="Pipeline",
+            model_type=ModelType.TASK,
+            tools=[],
+            body="body content",
+        )
+        result = adapter.render_agent(spec)
+        assert "name:" in result
+        assert "description:" in result
+
+    def test_render_command_generates_frontmatter(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        adapter = _make_codex_adapter(tmp_path, monkeypatch)
+        spec = CommandSpec(name="bp", description="Search", body="body content")
+        result = adapter.render_command(spec)
+        assert "name:" in result
+        assert "description:" in result
+
+    def test_write_all_creates_skill_dirs(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        adapter = _make_codex_adapter(tmp_path, monkeypatch)
+        adapter.write_all(_sample_agents(), _sample_commands())
+        assert (tmp_path / ".codex" / "skills" / "bp-pipeline" / "SKILL.md").exists()
+
+    def test_write_all_creates_openai_yaml(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        adapter = _make_codex_adapter(tmp_path, monkeypatch)
+        adapter.write_all(_sample_agents(), _sample_commands())
+        assert (
+            tmp_path / ".codex" / "skills" / "bp-pipeline" / "agents" / "openai.yaml"
+        ).exists()
+
+    def test_write_all_creates_config_toml(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        adapter = _make_codex_adapter(tmp_path, monkeypatch)
+        adapter.write_all(_sample_agents(), _sample_commands())
+        config_toml = tmp_path / ".codex" / "config.toml"
+        assert config_toml.exists()
+        assert "context7" in config_toml.read_text()
+
+    def test_merge_config_toml_idempotent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        adapter = _make_codex_adapter(tmp_path, monkeypatch)
+        adapter.write_all(_sample_agents(), _sample_commands())
+        adapter.write_all(_sample_agents(), _sample_commands())
+        text = (tmp_path / ".codex" / "config.toml").read_text()
+        # The mcp_servers.context7 section header must appear exactly once
+        assert text.count("[mcp_servers.context7]") == 1
+
+    def test_installed_file_relpaths(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        adapter = _make_codex_adapter(tmp_path, monkeypatch)
+        relpaths = adapter.installed_file_relpaths(_sample_agents(), _sample_commands())
+        assert "skills/bp-pipeline/SKILL.md" in relpaths
+        assert "skills/bp-pipeline/agents/openai.yaml" in relpaths

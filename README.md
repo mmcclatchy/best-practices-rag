@@ -95,8 +95,8 @@ Use `--tui` to control which tool(s) receive the installed agents and commands:
 # Install for OpenCode only
 best-practices-rag setup --tui opencode
 
-# Install for both Claude Code and OpenCode
-best-practices-rag setup --tui both
+# Install for all supported TUIs
+best-practices-rag setup --tui all
 
 # Auto-detect installed TUIs (default — installs for whichever is found)
 best-practices-rag setup
@@ -159,15 +159,15 @@ This skips the local cache entirely, fetches new content from Exa, and updates t
 ## All Commands
 
 ```bash
-best-practices-rag setup [--tui auto|claude|opencode|both]   # global one-command setup
+best-practices-rag setup [--tui auto|claude|opencode|codex|all]   # global one-command setup
 best-practices-rag setup-schema                              # apply schema to existing Neo4j (no Docker required)
-best-practices-rag check [--tui auto|claude|opencode|both]   # validate installed files
+best-practices-rag check [--tui auto|claude|opencode|codex|all]   # validate installed files
 best-practices-rag query-kb                                  # query knowledge base (used by /bp)
 best-practices-rag search-exa                                # search Exa (used by gap-fill agent)
 best-practices-rag store-result                              # store synthesized result to Neo4j
-best-practices-rag uninstall [--tui auto|claude|opencode|both]  # remove installed files
+best-practices-rag uninstall [--tui auto|claude|opencode|codex|all]  # remove installed files
 best-practices-rag version                                   # show installed version
-best-practices-rag update [--tui auto|claude|opencode|both]  # upgrade to the latest release
+best-practices-rag update [--tui auto|claude|opencode|codex|all]  # upgrade to the latest release
 ```
 
 ---
@@ -206,4 +206,4 @@ Install `uv` and `best-practices-rag` from inside the WSL2 terminal using the Li
 
 ## Version
 
-v0.2.7
+v0.2.8

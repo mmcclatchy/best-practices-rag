@@ -18,6 +18,8 @@ from neo4j.exceptions import AuthError, ClientError, ServiceUnavailable
 from pydantic import ValidationError
 
 from best_practices_rag import __version__
+from best_practices_rag.agent_defs import build_specs
+from best_practices_rag.commands.opencode_model import run
 from best_practices_rag.config import EXA_NUM_RESULTS_DEFAULT, get_settings
 from best_practices_rag.graph_store import GraphStore
 from best_practices_rag.knowledge_base import (
@@ -34,7 +36,6 @@ from best_practices_rag.staleness import (
     load_tech_info,
 )
 from best_practices_rag.storage import store_results
-from best_practices_rag.agent_defs import AGENTS, COMMANDS
 from best_practices_rag.tui import (
     AgentSpec,
     CommandSpec,
@@ -43,9 +44,6 @@ from best_practices_rag.tui import (
     get_adapter,
     resolve_tui_targets,
 )
-
-
-from best_practices_rag.commands.opencode_model import run
 
 
 app = typer.Typer(
@@ -77,33 +75,26 @@ def _copy_tree(src: Path, dst: Path, *, force: bool) -> list[str]:
     return copied
 
 
-def _bundle_skills_files(bundle: Path) -> set[str]:
-    result: set[str] = set()
-    src = bundle / "skills" / "best-practices-rag"
-    if src.exists():
-        for item in src.rglob("*"):
-            if item.is_file():
-                result.add(f"skills/best-practices-rag/{item.relative_to(src)}")
-    return result
-
-
-def _read_manifest(config_dir: Path) -> tuple[list[str], list[str]]:
+def _read_manifest(config_dir: Path) -> dict[str, list[str]]:
     path = config_dir / "manifest.json"
     if not path.exists():
-        return [], []
+        return {"files": [], "opencode_files": [], "codex_files": []}
     try:
         data = json.loads(path.read_text())
-        claude = data.get("files", [])
-        opencode = data.get("opencode_files", [])
-        return claude, opencode
+        return {
+            "files": data.get("files", []),
+            "opencode_files": data.get("opencode_files", []),
+            "codex_files": data.get("codex_files", []),
+        }
     except Exception:
-        return [], []
+        return {"files": [], "opencode_files": [], "codex_files": []}
 
 
 def _write_manifest(
     config_dir: Path,
     claude_files: set[str],
     opencode_files: set[str] | None = None,
+    codex_files: set[str] | None = None,
 ) -> None:
     (config_dir / "manifest.json").write_text(
         json.dumps(
@@ -111,6 +102,7 @@ def _write_manifest(
                 "version": __version__,
                 "files": sorted(claude_files),
                 "opencode_files": sorted(opencode_files or set()),
+                "codex_files": sorted(codex_files or set()),
             },
             indent=2,
         )
@@ -133,22 +125,14 @@ def _run_setup_schema() -> None:
 def _remove_stale_claude_files(
     claude_dir: Path, config_dir: Path, new_files: set[str]
 ) -> None:
-    claude_manifest, _ = _read_manifest(config_dir)
-    stale: set[str] = {f for f in claude_manifest if f not in new_files}
+    manifest = _read_manifest(config_dir)
+    stale: set[str] = {f for f in manifest["files"] if f not in new_files}
 
     # Namespace scan: catch bp-*.md agents installed before manifest tracking existed
     agents_dir = claude_dir / "agents"
     if agents_dir.exists():
         for f in agents_dir.glob("bp-*.md"):
             rel = f"agents/{f.name}"
-            if rel not in new_files:
-                stale.add(rel)
-
-    # References scan: remove stale reference files installed before manifest tracking
-    refs_dir = claude_dir / "skills" / "best-practices-rag" / "references"
-    if refs_dir.exists():
-        for f in refs_dir.glob("*.md"):
-            rel = f"skills/best-practices-rag/references/{f.name}"
             if rel not in new_files:
                 stale.add(rel)
 
@@ -162,10 +146,10 @@ def _remove_stale_claude_files(
 def _remove_stale_opencode_files(
     opencode_root: Path, config_dir: Path, new_files: set[str]
 ) -> None:
-    _, opencode_manifest = _read_manifest(config_dir)
+    manifest = _read_manifest(config_dir)
     # opencode.json is merged, not removed as stale
     stale: set[str] = {
-        f for f in opencode_manifest if f not in new_files and f != "opencode.json"
+        f for f in manifest["opencode_files"] if f not in new_files and f != "opencode.json"
     }
     for rel in stale:
         target = opencode_root / rel
@@ -174,27 +158,36 @@ def _remove_stale_opencode_files(
             print(f"  removed (stale): {target}")
 
 
+def _remove_stale_codex_files(
+    codex_root: Path, config_dir: Path, new_files: set[str]
+) -> None:
+    manifest = _read_manifest(config_dir)
+    # config.toml is merged, not removed as stale
+    stale: set[str] = {
+        f
+        for f in manifest["codex_files"]
+        if f not in new_files and f != "config.toml"
+    }
+    for rel in stale:
+        target = codex_root / rel
+        if target.exists():
+            target.unlink()
+            print(f"  removed (stale): {target}")
+
+
 def _install_tui_files(
     adapter: TuiAdapter,
-    agents: list[AgentSpec] | None = None,
-    commands: list[CommandSpec] | None = None,
+    agents: list[AgentSpec],
+    commands: list[CommandSpec],
 ) -> tuple[list[Path], list[str]]:
-    """Install agents and commands via adapter.
-
-    Returns (written_paths, rel_paths_for_manifest).
-    """
-    if agents is None:
-        agents = AGENTS
-    if commands is None:
-        commands = COMMANDS
-
     written = adapter.write_all(agents, commands)
     relpaths = adapter.installed_file_relpaths(agents, commands)
     return written, relpaths
 
 
 def _compute_tui_relpaths(adapter: TuiAdapter) -> list[str]:
-    return adapter.installed_file_relpaths(AGENTS, COMMANDS)
+    agents, commands = build_specs(adapter)
+    return adapter.installed_file_relpaths(agents, commands)
 
 
 def _parse_frontmatter(text: str) -> dict[str, str] | None:
@@ -216,10 +209,10 @@ def _find_references_dir() -> Path:
     local = Path.cwd() / ".claude" / "skills" / "best-practices-rag" / "references"
     if local.exists():
         return local
-    return Path.home() / ".claude" / "skills" / "best-practices-rag" / "references"
+    return Path.home() / ".config" / "best-practices-rag" / "references"
 
 
-def _check_file_cache(file: Path, model: str | None) -> dict:
+def _check_file_cache(file: Path, model: str | None) -> dict[str, Any]:
     if not file.exists():
         return {"hit": False, "reason": "file_not_found"}
     text = file.read_text(encoding="utf-8")
@@ -392,7 +385,7 @@ def setup(
     tui: str = typer.Option(
         "auto",
         "--tui",
-        help="TUI target: auto|claude|opencode|both (auto detects installed TUIs)",
+        help="TUI target: auto|claude|opencode|codex|all (auto detects installed TUIs)",
     ),
 ) -> None:
     """Install best-practices-rag globally.
@@ -411,7 +404,7 @@ def setup(
 
     OpenCode:
         best-practices-rag setup --tui opencode
-        best-practices-rag setup --tui both --exa-api-key your-key
+        best-practices-rag setup --tui all --exa-api-key your-key
     """
     config_dir = Path.home() / ".config" / "best-practices-rag"
     config_dir.mkdir(parents=True, exist_ok=True)
@@ -423,37 +416,41 @@ def setup(
     tui_targets = resolve_tui_targets(tui)
 
     # Skills always install to ~/.claude/ (OpenCode reads via compat shim)
-    skills_files = _bundle_skills_files(bundle)
-    if TuiKind.CLAUDE in tui_targets:
-        expected_claude = skills_files | set(
-            _compute_tui_relpaths(get_adapter(TuiKind.CLAUDE))
-        )
-    else:
-        expected_claude = skills_files
-    _remove_stale_claude_files(claude_dir, config_dir, expected_claude)
+    # Copy references to TUI-neutral location
     _copy_tree(
-        bundle / "skills" / "best-practices-rag",
-        claude_dir / "skills" / "best-practices-rag",
+        bundle / "skills" / "best-practices-rag" / "references",
+        config_dir / "references",
         force=True,
     )
+
+    # Compute expected Claude files for stale removal
+    if TuiKind.CLAUDE in tui_targets:
+        expected_claude = set(_compute_tui_relpaths(get_adapter(TuiKind.CLAUDE)))
+    else:
+        expected_claude = set()
+    _remove_stale_claude_files(claude_dir, config_dir, expected_claude)
 
     # Install agents and commands per TUI
     claude_tui_files: set[str] = set()
     opencode_tui_files: set[str] = set()
+    codex_tui_files: set[str] = set()
 
     for tui_kind in tui_targets:
         adapter = get_adapter(tui_kind)
         if tui_kind == TuiKind.OPENCODE:
             _remove_stale_opencode_files(adapter.install_root(), config_dir, set())
-        _, relpaths = _install_tui_files(adapter)
+        elif tui_kind == TuiKind.CODEX:
+            _remove_stale_codex_files(adapter.install_root(), config_dir, set())
+        agents, commands = build_specs(adapter)
+        _, relpaths = _install_tui_files(adapter, agents, commands)
         if tui_kind == TuiKind.CLAUDE:
             claude_tui_files = set(relpaths)
-        else:
+        elif tui_kind == TuiKind.OPENCODE:
             opencode_tui_files = set(relpaths)
+        elif tui_kind == TuiKind.CODEX:
+            codex_tui_files = set(relpaths)
 
-    # Merge claude files: tui files + skills files
-    all_claude_files = claude_tui_files | skills_files
-    _write_manifest(config_dir, all_claude_files, opencode_tui_files)
+    _write_manifest(config_dir, claude_tui_files, opencode_tui_files, codex_tui_files)
 
     env_example = config_dir / ".env.example"
     if not env_example.exists() or force:
@@ -547,10 +544,13 @@ _CLAUDE_EXPECTED_FILES = [
     "commands/bp.md",
     "commands/bpr.md",
     "agents/bp-pipeline.md",
-    "skills/best-practices-rag/references/synthesis-format.md",
-    "skills/best-practices-rag/references/synthesis-format-codegen.md",
-    "skills/best-practices-rag/references/synthesis-format-research.md",
-    "skills/best-practices-rag/references/tech-versions.md",
+]
+
+_REFERENCE_EXPECTED_FILES = [
+    "synthesis-format.md",
+    "synthesis-format-codegen.md",
+    "synthesis-format-research.md",
+    "tech-versions.md",
 ]
 
 _OPENCODE_EXPECTED_FILES = [
@@ -560,13 +560,22 @@ _OPENCODE_EXPECTED_FILES = [
     "opencode.json",
 ]
 
+_CODEX_EXPECTED_FILES = [
+    "skills/bp/SKILL.md",
+    "skills/bp/agents/openai.yaml",
+    "skills/bpr/SKILL.md",
+    "skills/bpr/agents/openai.yaml",
+    "skills/bp-pipeline/SKILL.md",
+    "skills/bp-pipeline/agents/openai.yaml",
+]
+
 
 @app.command()
 def check(
     tui: str = typer.Option(
         "auto",
         "--tui",
-        help="TUI target: auto|claude|opencode|both (auto checks installed TUIs)",
+        help="TUI target: auto|claude|opencode|codex|all (auto checks installed TUIs)",
     ),
 ) -> None:
     """Validate the global installation.
@@ -576,25 +585,33 @@ def check(
     verifies the Exa API key is configured (required for /bp gap-fill).
     """
     config_dir = Path.home() / ".config" / "best-practices-rag"
-    _, opencode_manifest = _read_manifest(config_dir)
+    manifest = _read_manifest(config_dir)
     claude_dir = Path.home() / ".claude"
     all_ok = True
 
     print("Checking best-practices-rag installation...\n")
 
-    # Determine TUIs to check: in auto mode, only check OpenCode if it was installed
+    # Determine TUIs to check: in auto mode, only check OpenCode/Codex if installed
     if tui == "auto":
         check_claude = True
-        check_opencode = bool(opencode_manifest)
-    elif tui == "both":
+        check_opencode = bool(manifest["opencode_files"])
+        check_codex = bool(manifest["codex_files"])
+    elif tui == "all":
         check_claude = True
         check_opencode = True
+        check_codex = True
     elif tui == "opencode":
         check_claude = False
         check_opencode = True
+        check_codex = False
+    elif tui == "codex":
+        check_claude = False
+        check_opencode = False
+        check_codex = True
     else:
         check_claude = True
         check_opencode = False
+        check_codex = False
 
     if check_claude:
         for f in _CLAUDE_EXPECTED_FILES:
@@ -615,6 +632,27 @@ def check(
             else:
                 print(f"  [FAIL] {label} — missing")
                 all_ok = False
+
+    if check_codex:
+        codex_root = Path.home() / ".codex"
+        for f in _CODEX_EXPECTED_FILES:
+            path = codex_root / f
+            label = f"~/.codex/{f}"
+            if path.exists():
+                print(f"  [pass] {label}")
+            else:
+                print(f"  [FAIL] {label} — missing")
+                all_ok = False
+
+    # TUI-neutral reference check (always when any TUI is active)
+    for f in _REFERENCE_EXPECTED_FILES:
+        path = config_dir / "references" / f
+        label = f"~/.config/best-practices-rag/references/{f}"
+        if path.exists():
+            print(f"  [pass] {label}")
+        else:
+            print(f"  [FAIL] {label} — missing")
+            all_ok = False
 
     print()
     try:
@@ -653,9 +691,11 @@ def check(
             database_="neo4j",
         )
         existing: set[str] = set(records[0]["names"]) if records else set()
-        missing: list[str] = [idx for idx in expected_indexes if idx not in existing]
-        if missing:
-            print(f"  [FAIL] Schema — missing indexes: {', '.join(missing)}")
+        missing_indexes: list[str] = [
+            idx for idx in expected_indexes if idx not in existing
+        ]
+        if missing_indexes:
+            print(f"  [FAIL] Schema — missing indexes: {', '.join(missing_indexes)}")
             print("    Run: best-practices-rag setup-schema")
             all_ok = False
         else:
@@ -1255,9 +1295,9 @@ def uninstall(
         False, "--all", help="Also remove ~/.config/best-practices-rag/"
     ),
     tui: str = typer.Option(
-        "both",
+        "all",
         "--tui",
-        help="TUI target: auto|claude|opencode|both (default: both)",
+        help="TUI target: auto|claude|opencode|codex|all (default: all)",
     ),
 ) -> None:
     """Remove installed skill files.
@@ -1285,9 +1325,6 @@ def uninstall(
             claude_dir / "commands" / "bpr.md",
             claude_dir / "agents" / "bp-pipeline.md",
         ]
-        refs_dir = claude_dir / "skills" / "best-practices-rag" / "references"
-        if refs_dir.exists():
-            files_to_remove.extend(refs_dir.glob("*.md"))
 
         for f in files_to_remove:
             if f.exists():
@@ -1295,15 +1332,6 @@ def uninstall(
                 print(f"  removed: {f}")
             else:
                 print(f"  skip (missing): {f}")
-
-        for d in [
-            claude_dir / "skills" / "best-practices-rag" / "references",
-            claude_dir / "skills" / "best-practices-rag",
-            claude_dir / "skills",
-        ]:
-            if d.exists() and not any(d.iterdir()):
-                d.rmdir()
-                print(f"  removed dir: {d}")
 
     if TuiKind.OPENCODE in tui_targets:
         opencode_root = Path.home() / ".config" / "opencode"
@@ -1321,8 +1349,19 @@ def uninstall(
 
         # Remove our entries from opencode.json without deleting the file
         oc_adapter = get_adapter(TuiKind.OPENCODE)
-        oc_adapter.remove_entries(AGENTS, COMMANDS)
+        oc_agents, oc_commands = build_specs(oc_adapter)
+        oc_adapter.remove_entries(oc_agents, oc_commands)
         print(f"  updated: {opencode_root / 'opencode.json'}")
+
+    if TuiKind.CODEX in tui_targets:
+        codex_root = Path.home() / ".codex"
+        for skill_name in ["bp", "bpr", "bp-pipeline"]:
+            skill_dir = codex_root / "skills" / skill_name
+            if skill_dir.exists():
+                shutil.rmtree(skill_dir)
+                print(f"  removed dir: {skill_dir}")
+            else:
+                print(f"  skip (missing): {skill_dir}")
 
     if remove_all:
         config_dir = Path.home() / ".config" / "best-practices-rag"
@@ -1389,7 +1428,7 @@ def update(
     tui: str = typer.Option(
         "auto",
         "--tui",
-        help="TUI target: auto|claude|opencode|both (auto detects installed TUIs)",
+        help="TUI target: auto|claude|opencode|codex|all (auto detects installed TUIs)",
     ),
 ) -> None:
     """Upgrade best-practices-rag to the latest release.
@@ -1418,37 +1457,47 @@ def update(
             bundle = _bundle_root()
             tui_targets = resolve_tui_targets(tui)
 
-            # Skills always update to ~/.claude/ (OpenCode reads via compat shim)
-            skills_files = _bundle_skills_files(bundle)
-            if TuiKind.CLAUDE in tui_targets:
-                expected_claude = skills_files | set(
-                    _compute_tui_relpaths(get_adapter(TuiKind.CLAUDE))
-                )
-            else:
-                expected_claude = skills_files
-            _remove_stale_claude_files(claude_dir, config_dir, expected_claude)
+            # Copy references to TUI-neutral location
             _copy_tree(
-                bundle / "skills" / "best-practices-rag",
-                claude_dir / "skills" / "best-practices-rag",
+                bundle / "skills" / "best-practices-rag" / "references",
+                config_dir / "references",
                 force=True,
             )
 
+            # Compute expected Claude files for stale removal
+            if TuiKind.CLAUDE in tui_targets:
+                expected_claude = set(
+                    _compute_tui_relpaths(get_adapter(TuiKind.CLAUDE))
+                )
+            else:
+                expected_claude = set()
+            _remove_stale_claude_files(claude_dir, config_dir, expected_claude)
+
             claude_tui_files: set[str] = set()
             opencode_tui_files: set[str] = set()
+            codex_tui_files: set[str] = set()
             for tui_kind in tui_targets:
                 adapter = get_adapter(tui_kind)
                 if tui_kind == TuiKind.OPENCODE:
                     _remove_stale_opencode_files(
                         adapter.install_root(), config_dir, set()
                     )
-                _, relpaths = _install_tui_files(adapter)
+                elif tui_kind == TuiKind.CODEX:
+                    _remove_stale_codex_files(
+                        adapter.install_root(), config_dir, set()
+                    )
+                agents, commands = build_specs(adapter)
+                _, relpaths = _install_tui_files(adapter, agents, commands)
                 if tui_kind == TuiKind.CLAUDE:
                     claude_tui_files = set(relpaths)
-                else:
+                elif tui_kind == TuiKind.OPENCODE:
                     opencode_tui_files = set(relpaths)
+                elif tui_kind == TuiKind.CODEX:
+                    codex_tui_files = set(relpaths)
 
-            all_claude_files = claude_tui_files | skills_files
-            _write_manifest(config_dir, all_claude_files, opencode_tui_files)
+            _write_manifest(
+                config_dir, claude_tui_files, opencode_tui_files, codex_tui_files
+            )
 
             compose_file = config_dir / "docker-compose.yml"
             if compose_file.exists():

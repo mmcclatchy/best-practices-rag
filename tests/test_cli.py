@@ -7,6 +7,7 @@ from neo4j.exceptions import AuthError, ServiceUnavailable
 from pytest_mock import MockerFixture
 
 from best_practices_rag.cli import _generate_slug
+from best_practices_rag.cli import _remove_stale_codex_files
 from best_practices_rag.cli import _resolve_exa_num_results
 from best_practices_rag.cli import check
 from best_practices_rag.cli import logs
@@ -217,12 +218,19 @@ def test_cmd_check_validates_global_claude_dir(
         "commands/bp.md",
         "commands/bpr.md",
         "agents/bp-pipeline.md",
-        "skills/best-practices-rag/references/synthesis-format.md",
-        "skills/best-practices-rag/references/synthesis-format-codegen.md",
-        "skills/best-practices-rag/references/synthesis-format-research.md",
-        "skills/best-practices-rag/references/tech-versions.md",
     ]:
         p = claude_dir / f
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("")
+
+    config_dir = tmp_path / ".config" / "best-practices-rag"
+    for f in [
+        "synthesis-format.md",
+        "synthesis-format-codegen.md",
+        "synthesis-format-research.md",
+        "tech-versions.md",
+    ]:
+        p = config_dir / "references" / f
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("")
 
@@ -439,6 +447,17 @@ def test_check_opencode_passes_when_files_present(
     (config_dir / "manifest.json").write_text(
         json.dumps({"opencode_files": ["prompts/bp.md"]})
     )
+
+    # Create reference files in TUI-neutral location
+    for f in [
+        "synthesis-format.md",
+        "synthesis-format-codegen.md",
+        "synthesis-format-research.md",
+        "tech-versions.md",
+    ]:
+        p = config_dir / "references" / f
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("")
 
     mock_settings = mocker.MagicMock()
     mock_settings.neo4j_uri = "bolt://localhost:7687"
@@ -862,3 +881,54 @@ def test_logs_command_follow_calls_tail_f(
     logs(lines=50, follow=True)
 
     mock_run.assert_called_once_with(["tail", "-f", str(log_file)])
+
+
+def test_remove_stale_codex_files_preserves_config_toml(tmp_path: Path) -> None:
+    codex_root = tmp_path / ".codex"
+    codex_root.mkdir(parents=True)
+    config_toml = codex_root / "config.toml"
+    config_toml.write_text("[features]\nmulti_agent = true\n")
+
+    config_dir = tmp_path / ".config" / "best-practices-rag"
+    config_dir.mkdir(parents=True)
+    (config_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "files": [],
+                "opencode_files": [],
+                "codex_files": ["config.toml"],
+            }
+        )
+    )
+
+    _remove_stale_codex_files(codex_root, config_dir, new_files=set())
+
+    assert config_toml.exists()
+
+
+def test_read_manifest_returns_dict_with_codex_files(tmp_path: Path) -> None:
+    from best_practices_rag.cli import _read_manifest, _write_manifest
+
+    config_dir = tmp_path / ".config" / "best-practices-rag"
+    config_dir.mkdir(parents=True)
+
+    _write_manifest(
+        config_dir,
+        claude_files={"commands/bp.md"},
+        opencode_files={"prompts/bp.md"},
+        codex_files={"skills/bp/SKILL.md"},
+    )
+
+    result = _read_manifest(config_dir)
+    assert isinstance(result, dict)
+    assert "commands/bp.md" in result["files"]
+    assert "prompts/bp.md" in result["opencode_files"]
+    assert "skills/bp/SKILL.md" in result["codex_files"]
+
+
+def test_read_manifest_missing_returns_empty_dict(tmp_path: Path) -> None:
+    from best_practices_rag.cli import _read_manifest
+
+    config_dir = tmp_path / "nonexistent"
+    result = _read_manifest(config_dir)
+    assert result == {"files": [], "opencode_files": [], "codex_files": []}

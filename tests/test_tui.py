@@ -1,6 +1,7 @@
 """Tests for best_practices_rag/tui.py — TUI adapter pattern."""
 
 import json
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -478,6 +479,14 @@ class TestClaudeCodeAdapterReferencePath:
         )
         assert "Task(test-agent):" in result
 
+    def test_render_command_invocation_uses_slash_prefix(self) -> None:
+        config = ModelConfig(reasoning_model="opus", task_model="sonnet")
+        adapter = ClaudeCodeAdapter(config)
+        assert adapter.render_command_invocation("bp", "<query>") == "/bp <query>"
+        assert (
+            adapter.render_command_invocation("bpr", "$ARGUMENTS") == "/bpr $ARGUMENTS"
+        )
+
 
 class TestOpenCodeAdapterReferencePath:
     def test_reference_path_format(self) -> None:
@@ -497,13 +506,23 @@ class TestOpenCodeAdapterReferencePath:
         assert "Task(bp-pipeline):" in result
         assert "MODE: research" in result
 
+    def test_render_command_invocation_uses_slash_prefix(self) -> None:
+        config = ModelConfig(reasoning_model="glm-5", task_model="minimax-m2.7")
+        adapter = OpenCodeAdapter(config)
+        assert adapter.render_command_invocation("bp", "<query>") == "/bp <query>"
+        assert (
+            adapter.render_command_invocation("bpr", "$ARGUMENTS") == "/bpr $ARGUMENTS"
+        )
+
 
 # ---------------------------------------------------------------------------
 # CodexAdapter
 # ---------------------------------------------------------------------------
 
 
-def _make_codex_adapter(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> CodexAdapter:
+def _make_codex_adapter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> CodexAdapter:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     config = ModelConfig(reasoning_model="o4-mini", task_model="o4-mini")
     return CodexAdapter(config)
@@ -522,19 +541,28 @@ def _sample_agents() -> list[AgentSpec]:
 
 
 def _sample_commands() -> list[CommandSpec]:
-    return [CommandSpec(name="bp", description="Search best practices", body="# BP body")]
+    return [
+        CommandSpec(name="bp", description="Search best practices", body="# BP body"),
+        CommandSpec(
+            name="bpr", description="Research best practices", body="# BPR body"
+        ),
+    ]
 
 
 class TestCodexAdapter:
-    def test_install_root(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_install_root(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         adapter = _make_codex_adapter(tmp_path, monkeypatch)
         assert adapter.install_root() == tmp_path / ".codex"
 
     def test_agents_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         adapter = _make_codex_adapter(tmp_path, monkeypatch)
-        assert adapter.agents_dir() == tmp_path / ".codex" / "skills"
+        assert adapter.agents_dir() == tmp_path / ".codex" / "agents"
 
-    def test_commands_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_commands_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         adapter = _make_codex_adapter(tmp_path, monkeypatch)
         assert adapter.commands_dir() == tmp_path / ".codex" / "skills"
 
@@ -545,7 +573,16 @@ class TestCodexAdapter:
         result = adapter.reference_path("tech-versions.md")
         assert result == "~/.config/best-practices-rag/references/tech-versions.md"
 
-    def test_render_agent_invocation_contains_invoke(
+    def test_render_command_invocation_uses_dollar_prefix(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        adapter = _make_codex_adapter(tmp_path, monkeypatch)
+        assert adapter.render_command_invocation("bp", "<query>") == "$bp <query>"
+        assert (
+            adapter.render_command_invocation("bpr", "$ARGUMENTS") == "$bpr $ARGUMENTS"
+        )
+
+    def test_render_agent_invocation_contains_agent_delegation(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         adapter = _make_codex_adapter(tmp_path, monkeypatch)
@@ -554,7 +591,8 @@ class TestCodexAdapter:
             description="run the best-practices pipeline",
             params=[("MODE", "codegen")],
         )
-        assert "Invoke the 'bp-pipeline' skill" in result
+        assert "Spawn or delegate to the 'bp-pipeline' agent" in result
+        assert "Invoke the 'bp-pipeline' skill" not in result
 
     def test_render_agent_invocation_no_task_block(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -567,7 +605,7 @@ class TestCodexAdapter:
         )
         assert "Task(bp-pipeline):" not in result
 
-    def test_render_agent_generates_frontmatter(
+    def test_render_agent_generates_toml(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         adapter = _make_codex_adapter(tmp_path, monkeypatch)
@@ -576,11 +614,15 @@ class TestCodexAdapter:
             description="Pipeline",
             model_type=ModelType.TASK,
             tools=[],
-            body="body content",
+            body="body content\ncommand " + "\\" + "\nnext",
         )
         result = adapter.render_agent(spec)
-        assert "name:" in result
-        assert "description:" in result
+        data = tomllib.loads(result)
+        assert data["name"] == "bp-pipeline"
+        assert data["description"] == "Pipeline"
+        assert data["model"] == "o4-mini"
+        assert data["sandbox_mode"] == "workspace-write"
+        assert data["developer_instructions"] == "body content\ncommand \\\nnext\n"
 
     def test_render_command_generates_frontmatter(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -591,19 +633,24 @@ class TestCodexAdapter:
         assert "name:" in result
         assert "description:" in result
 
-    def test_write_all_creates_skill_dirs(
+    def test_write_all_creates_agent_toml(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         adapter = _make_codex_adapter(tmp_path, monkeypatch)
         adapter.write_all(_sample_agents(), _sample_commands())
-        assert (tmp_path / ".codex" / "skills" / "bp-pipeline" / "SKILL.md").exists()
+        assert (tmp_path / ".codex" / "agents" / "bp-pipeline.toml").exists()
+        assert (tmp_path / ".codex" / "skills" / "bp" / "SKILL.md").exists()
+        assert (tmp_path / ".codex" / "skills" / "bpr" / "SKILL.md").exists()
 
-    def test_write_all_creates_openai_yaml(
+    def test_write_all_does_not_create_agent_skill_artifacts(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         adapter = _make_codex_adapter(tmp_path, monkeypatch)
         adapter.write_all(_sample_agents(), _sample_commands())
-        assert (
+        assert not (
+            tmp_path / ".codex" / "skills" / "bp-pipeline" / "SKILL.md"
+        ).exists()
+        assert not (
             tmp_path / ".codex" / "skills" / "bp-pipeline" / "agents" / "openai.yaml"
         ).exists()
 
@@ -631,5 +678,8 @@ class TestCodexAdapter:
     ) -> None:
         adapter = _make_codex_adapter(tmp_path, monkeypatch)
         relpaths = adapter.installed_file_relpaths(_sample_agents(), _sample_commands())
-        assert "skills/bp-pipeline/SKILL.md" in relpaths
-        assert "skills/bp-pipeline/agents/openai.yaml" in relpaths
+        assert "agents/bp-pipeline.toml" in relpaths
+        assert "skills/bp/SKILL.md" in relpaths
+        assert "skills/bpr/SKILL.md" in relpaths
+        assert "skills/bp-pipeline/SKILL.md" not in relpaths
+        assert "skills/bp-pipeline/agents/openai.yaml" not in relpaths

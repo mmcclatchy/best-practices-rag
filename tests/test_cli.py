@@ -225,6 +225,7 @@ def test_cmd_check_validates_global_claude_dir(
 
     config_dir = tmp_path / ".config" / "best-practices-rag"
     for f in [
+        "bp-pipeline-interface.md",
         "synthesis-format.md",
         "synthesis-format-codegen.md",
         "synthesis-format-research.md",
@@ -450,6 +451,7 @@ def test_check_opencode_passes_when_files_present(
 
     # Create reference files in TUI-neutral location
     for f in [
+        "bp-pipeline-interface.md",
         "synthesis-format.md",
         "synthesis-format-codegen.md",
         "synthesis-format-research.md",
@@ -491,6 +493,72 @@ def test_check_opencode_passes_when_files_present(
 
     out = capsys.readouterr().out
     assert "~/.config/opencode/" in out
+    assert "[FAIL]" not in out
+
+
+def test_check_codex_passes_when_agent_and_skills_present(
+    mocker: MockerFixture,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    """check --tui codex passes when the agent TOML and command skills exist."""
+    mocker.patch("pathlib.Path.home", return_value=tmp_path)
+
+    codex_root = tmp_path / ".codex"
+    for f in [
+        "agents/bp-pipeline.toml",
+        "skills/bp/SKILL.md",
+        "skills/bpr/SKILL.md",
+    ]:
+        p = codex_root / f
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("")
+
+    config_dir = tmp_path / ".config" / "best-practices-rag"
+    for f in [
+        "bp-pipeline-interface.md",
+        "synthesis-format.md",
+        "synthesis-format-codegen.md",
+        "synthesis-format-research.md",
+        "tech-versions.md",
+    ]:
+        p = config_dir / "references" / f
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("")
+
+    mock_settings = mocker.MagicMock()
+    mock_settings.neo4j_uri = "bolt://localhost:7687"
+    mock_settings.neo4j_username = "neo4j"
+    mock_settings.neo4j_password.get_secret_value.return_value = "test"
+    mock_settings.exa_api_key.get_secret_value.return_value = "test-key"
+    mocker.patch("best_practices_rag.cli.get_settings", return_value=mock_settings)
+    mock_driver_instance = mocker.MagicMock()
+    mock_driver_instance.execute_query.return_value = (
+        [
+            {
+                "names": [
+                    "bp_fulltext",
+                    "constraint_best_practice_id",
+                    "constraint_technology_id",
+                    "constraint_pattern_id",
+                    "index_best_practice_name",
+                    "index_best_practice_category",
+                    "index_technology_name",
+                ]
+            }
+        ],
+        None,
+        None,
+    )
+    mocker.patch(
+        "best_practices_rag.cli.GraphDatabase.driver", return_value=mock_driver_instance
+    )
+
+    check(tui="codex")
+
+    out = capsys.readouterr().out
+    assert "~/.codex/agents/bp-pipeline.toml" in out
+    assert "~/.codex/skills/bp/SKILL.md" in out
     assert "[FAIL]" not in out
 
 
@@ -539,6 +607,31 @@ def test_uninstall_opencode_removes_prompts(
     config = json.loads((opencode_dir / "opencode.json").read_text())
     assert "bp-pipeline" not in config["agent"]
     assert "user" in config["agent"]
+
+
+def test_uninstall_codex_removes_agent_and_skills(
+    mocker: MockerFixture,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    mocker.patch("pathlib.Path.home", return_value=tmp_path)
+
+    codex_root = tmp_path / ".codex"
+    agent_file = codex_root / "agents" / "bp-pipeline.toml"
+    agent_file.parent.mkdir(parents=True)
+    agent_file.write_text('name = "bp-pipeline"\n')
+
+    for skill_name in ["bp", "bpr", "bp-pipeline"]:
+        skill_dir = codex_root / "skills" / skill_name
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("")
+
+    uninstall(remove_all=False, tui="codex")
+
+    assert not agent_file.exists()
+    assert not (codex_root / "skills" / "bp").exists()
+    assert not (codex_root / "skills" / "bpr").exists()
+    assert not (codex_root / "skills" / "bp-pipeline").exists()
 
 
 def test_query_kb_format_md_outputs_markdown(
@@ -904,6 +997,22 @@ def test_remove_stale_codex_files_preserves_config_toml(tmp_path: Path) -> None:
     _remove_stale_codex_files(codex_root, config_dir, new_files=set())
 
     assert config_toml.exists()
+
+
+def test_remove_stale_codex_files_removes_legacy_bp_pipeline_skill(
+    tmp_path: Path,
+) -> None:
+    codex_root = tmp_path / ".codex"
+    legacy_skill = codex_root / "skills" / "bp-pipeline"
+    legacy_skill.mkdir(parents=True)
+    (legacy_skill / "SKILL.md").write_text("")
+
+    config_dir = tmp_path / ".config" / "best-practices-rag"
+    config_dir.mkdir(parents=True)
+
+    _remove_stale_codex_files(codex_root, config_dir, new_files=set())
+
+    assert not legacy_skill.exists()
 
 
 def test_read_manifest_returns_dict_with_codex_files(tmp_path: Path) -> None:

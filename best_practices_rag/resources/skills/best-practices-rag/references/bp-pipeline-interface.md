@@ -1,10 +1,12 @@
 # bp-pipeline Interface Reference
 
-Reference document for callers that dispatch `bp-pipeline` via `Task(bp-pipeline)`. Intended for use by `/bp`, `/bpr`, and respec-phase Step 7.5 parallel dispatch.
+Reference document for callers that dispatch `bp-pipeline`. Intended for use by `/bp`, `/bpr`, and respec-phase Step 7.5 parallel dispatch.
+
+Claude Code and OpenCode dispatch `bp-pipeline` with `Task(bp-pipeline)`. Codex dispatches it as a custom agent from `.codex/agents/bp-pipeline.toml`.
 
 ## Input Interface
 
-All fields are strings unless noted. Optional fields may be omitted from the Task block entirely.
+All fields are strings unless noted. Optional fields may be omitted from the Task block or agent prompt entirely.
 
 | Field | Required | Type | Description |
 |---|---|---|---|
@@ -49,7 +51,9 @@ BP_PIPELINE_COMPLETE. Output: <OUTPUT_FILE>. Extra: <EXTRA_TECHS>. KB_Stored: <t
 
 **Error handling**: If bp-pipeline output does not contain `BP_PIPELINE_COMPLETE`, the caller must surface an explicit error to the user rather than silently continuing with a missing or wrong output path.
 
-## Minimal Task Block Example
+## Claude/OpenCode Task Examples
+
+### Minimal Task Block Example
 
 ```text
 Task(bp-pipeline):
@@ -65,7 +69,7 @@ LANGUAGES: python
 ALL_QUERIED_TECHS: fastapi,sqlalchemy
 ```
 
-## Language-Agnostic Task Block Example
+### Language-Agnostic Task Block Example
 
 ```text
 Task(bp-pipeline):
@@ -83,7 +87,7 @@ ALL_QUERIED_TECHS: redis
 
 Note: `LANGUAGE_AGNOSTIC` and `LANGUAGES` are mutually exclusive. When `LANGUAGE_AGNOSTIC` is true, synthesis uses pseudocode for all code examples.
 
-## Cache-Hit Task Block Example
+### Cache-Hit Task Block Example
 
 ```text
 Task(bp-pipeline):
@@ -99,13 +103,39 @@ ALL_QUERIED_TECHS: fastapi,sqlalchemy
 
 Note: `CUTOFF_DATE`, `PRIMARY_QUERY`, and gap-related fields are omitted on the cache-hit path — bp-pipeline detects the absence of `UNCOVERED_TECH` and proceeds directly to Step 7.
 
+## Codex Agent Dispatch
+
+Codex installs `bp-pipeline` as a custom agent TOML file:
+
+```text
+~/.codex/agents/bp-pipeline.toml
+```
+
+Spawn or delegate to the `bp-pipeline` agent with the same input fields:
+
+```text
+Spawn/delegate to agent: bp-pipeline
+MODE: codegen
+TECH: fastapi,sqlalchemy
+QUERY: async session management with SQLAlchemy 2.0
+TECH_VERSIONS_JSON: {"fastapi":"0.116","sqlalchemy":"2.0"}
+CUTOFF_DATE: 2024-01-01
+PRIMARY_QUERY: FastAPI 0.116 async session management SQLAlchemy 2.0 official documentation
+OUTPUT_FILE: .best-practices/fastapi-sqlalchemy-async-session-management-codegen.md
+TOPICS: async,session management
+LANGUAGES: python
+ALL_QUERIED_TECHS: fastapi,sqlalchemy
+```
+
+Wait for the same `BP_PIPELINE_COMPLETE` signal before continuing.
+
 ## Concurrency Notes
 
 bp-pipeline instances are stateless per invocation. All large-data operations (Exa results, context7 documentation, synthesis working notes) live exclusively in the ephemeral subagent context and are never shared with the caller or other instances.
 
 This design makes parallel dispatch safe: two bp-pipeline invocations for different `TECH` values will not interfere with each other. The only shared resource is the Neo4j KB, which is written by `store_result.py` — each invocation writes a separate node scoped to its own `STORE_TECH`, so concurrent writes do not collide.
 
-**Parallel dispatch pattern for respec-phase Step 7.5:**
+**Parallel dispatch pattern for Claude/OpenCode respec-phase Step 7.5:**
 
 ```text
 Parallel:
@@ -113,5 +143,7 @@ Parallel:
   Task(bp-pipeline): [tech-B params]
 Wait for both BP_PIPELINE_COMPLETE signals before proceeding.
 ```
+
+For Codex, spawn/delegate to two `bp-pipeline` agent instances with distinct input prompts and wait for both `BP_PIPELINE_COMPLETE` signals before proceeding.
 
 Each instance writes to a distinct `OUTPUT_FILE` and a distinct KB node.

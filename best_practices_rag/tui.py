@@ -121,6 +121,9 @@ class TuiAdapter(ABC):
     def render_command(self, spec: CommandSpec) -> str: ...
 
     @abstractmethod
+    def render_command_invocation(self, command_name: str, args: str) -> str: ...
+
+    @abstractmethod
     def write_all(
         self,
         agents: list[AgentSpec],
@@ -215,6 +218,9 @@ color: {color}
     def render_command(self, spec: CommandSpec) -> str:
         return spec.body
 
+    def render_command_invocation(self, command_name: str, args: str) -> str:
+        return f"/{command_name} {args}".rstrip()
+
     def write_all(
         self,
         agents: list[AgentSpec],
@@ -298,6 +304,9 @@ class OpenCodeAdapter(TuiAdapter):
 
     def render_command(self, spec: CommandSpec) -> str:
         return spec.body
+
+    def render_command_invocation(self, command_name: str, args: str) -> str:
+        return f"/{command_name} {args}".rstrip()
 
     def write_all(
         self,
@@ -435,7 +444,7 @@ class CodexAdapter(TuiAdapter):
         return Path.home() / ".codex"
 
     def agents_dir(self) -> Path:
-        return self.install_root() / "skills"
+        return self.install_root() / "agents"
 
     def commands_dir(self) -> Path:
         return self.install_root() / "skills"
@@ -449,7 +458,7 @@ class CodexAdapter(TuiAdapter):
         description: str,
         params: list[tuple[str, str]],
     ) -> str:
-        lines = [f"Invoke the '{agent_name}' skill to {description}."]
+        lines = [f"Spawn or delegate to the '{agent_name}' agent to {description}."]
         lines.append("Input:")
         for key, value in params:
             lines.append(f"  - {key}: {value}")
@@ -457,34 +466,43 @@ class CodexAdapter(TuiAdapter):
         return "\n".join(lines)
 
     def render_agent(self, spec: AgentSpec) -> str:
-        return f"---\nname: {spec.name}\ndescription: {self._yaml_escape(spec.description)}\n---\n\n{spec.body}"
+        model = (
+            self.task_model
+            if spec.model_type == ModelType.TASK
+            else self.reasoning_model
+        )
+        return (
+            f"name = {self._yaml_escape(spec.name)}\n"
+            f"description = {self._yaml_escape(spec.description)}\n"
+            f"model = {self._yaml_escape(model)}\n"
+            'sandbox_mode = "workspace-write"\n'
+            'developer_instructions = """\n'
+            f"{self._toml_multiline_escape(spec.body)}\n"
+            '"""\n'
+        )
 
     def render_command(self, spec: CommandSpec) -> str:
         return f"---\nname: {spec.name}\ndescription: {self._yaml_escape(spec.description)}\n---\n\n{spec.body}"
+
+    def render_command_invocation(self, command_name: str, args: str) -> str:
+        return f"${command_name} {args}".rstrip()
 
     def write_all(
         self,
         agents: list[AgentSpec],
         commands: list[CommandSpec],
     ) -> list[Path]:
+        agents_dir = self.agents_dir()
         skills_root = self.install_root() / "skills"
         files_written: list[Path] = []
 
         for spec in agents:
-            skill_dir = skills_root / spec.name
-            skill_dir.mkdir(parents=True, exist_ok=True)
-            agents_dir = skill_dir / "agents"
             agents_dir.mkdir(parents=True, exist_ok=True)
 
-            skill_md = skill_dir / "SKILL.md"
-            skill_md.write_text(self.render_agent(spec), encoding="utf-8")
-            files_written.append(skill_md)
-            print(f"  copied: {skill_md}")
-
-            openai_yaml = agents_dir / "openai.yaml"
-            openai_yaml.write_text(self._render_openai_yaml(spec), encoding="utf-8")
-            files_written.append(openai_yaml)
-            print(f"  copied: {openai_yaml}")
+            agent_toml = agents_dir / f"{spec.name}.toml"
+            agent_toml.write_text(self.render_agent(spec), encoding="utf-8")
+            files_written.append(agent_toml)
+            print(f"  copied: {agent_toml}")
 
         for spec in commands:
             skill_dir = skills_root / spec.name
@@ -506,8 +524,7 @@ class CodexAdapter(TuiAdapter):
     ) -> list[str]:
         result: list[str] = []
         for spec in agents:
-            result.append(f"skills/{spec.name}/SKILL.md")
-            result.append(f"skills/{spec.name}/agents/openai.yaml")
+            result.append(f"agents/{spec.name}.toml")
         for spec in commands:
             result.append(f"skills/{spec.name}/SKILL.md")
         return result
@@ -537,22 +554,14 @@ class CodexAdapter(TuiAdapter):
         config_path.parent.mkdir(parents=True, exist_ok=True)
         config_path.write_text(tomli_w.dumps(data), encoding="utf-8")
 
-    def _render_openai_yaml(self, spec: AgentSpec) -> str:
-        name_escaped = self._yaml_escape(spec.name)
-        desc_escaped = self._yaml_escape(spec.description)
-        return (
-            f"name: {name_escaped}\n"
-            f"description: {desc_escaped}\n"
-            "interface:\n"
-            "  type: natural-language\n"
-            "policy:\n"
-            "  allow_implicit_invocation: false\n"
-        )
-
     @staticmethod
     def _yaml_escape(value: str) -> str:
         escaped = value.replace("\\", "\\\\").replace('"', '\\"')
         return f'"{escaped}"'
+
+    @staticmethod
+    def _toml_multiline_escape(value: str) -> str:
+        return value.replace("\\", "\\\\").replace('"""', '\\"\\"\\"')
 
 
 _ADAPTER_REGISTRY: dict[TuiKind, type[TuiAdapter]] = {

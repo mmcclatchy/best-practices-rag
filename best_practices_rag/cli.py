@@ -149,7 +149,9 @@ def _remove_stale_opencode_files(
     manifest = _read_manifest(config_dir)
     # opencode.json is merged, not removed as stale
     stale: set[str] = {
-        f for f in manifest["opencode_files"] if f not in new_files and f != "opencode.json"
+        f
+        for f in manifest["opencode_files"]
+        if f not in new_files and f != "opencode.json"
     }
     for rel in stale:
         target = opencode_root / rel
@@ -164,15 +166,21 @@ def _remove_stale_codex_files(
     manifest = _read_manifest(config_dir)
     # config.toml is merged, not removed as stale
     stale: set[str] = {
-        f
-        for f in manifest["codex_files"]
-        if f not in new_files and f != "config.toml"
+        f for f in manifest["codex_files"] if f not in new_files and f != "config.toml"
     }
     for rel in stale:
         target = codex_root / rel
         if target.exists():
             target.unlink()
             print(f"  removed (stale): {target}")
+
+    # Namespace scan: bp-pipeline used to be installed as a Codex skill.
+    # It is now a Codex agent, so remove stale internal-skill installs even
+    # when no manifest is available from the old installation.
+    stale_pipeline_skill = codex_root / "skills" / "bp-pipeline"
+    if stale_pipeline_skill.exists() and "skills/bp-pipeline/SKILL.md" not in new_files:
+        shutil.rmtree(stale_pipeline_skill)
+        print(f"  removed (stale): {stale_pipeline_skill}")
 
 
 def _install_tui_files(
@@ -547,6 +555,7 @@ _CLAUDE_EXPECTED_FILES = [
 ]
 
 _REFERENCE_EXPECTED_FILES = [
+    "bp-pipeline-interface.md",
     "synthesis-format.md",
     "synthesis-format-codegen.md",
     "synthesis-format-research.md",
@@ -561,12 +570,9 @@ _OPENCODE_EXPECTED_FILES = [
 ]
 
 _CODEX_EXPECTED_FILES = [
+    "agents/bp-pipeline.toml",
     "skills/bp/SKILL.md",
-    "skills/bp/agents/openai.yaml",
     "skills/bpr/SKILL.md",
-    "skills/bpr/agents/openai.yaml",
-    "skills/bp-pipeline/SKILL.md",
-    "skills/bp-pipeline/agents/openai.yaml",
 ]
 
 
@@ -1355,6 +1361,13 @@ def uninstall(
 
     if TuiKind.CODEX in tui_targets:
         codex_root = Path.home() / ".codex"
+        agent_file = codex_root / "agents" / "bp-pipeline.toml"
+        if agent_file.exists():
+            agent_file.unlink()
+            print(f"  removed: {agent_file}")
+        else:
+            print(f"  skip (missing): {agent_file}")
+
         for skill_name in ["bp", "bpr", "bp-pipeline"]:
             skill_dir = codex_root / "skills" / skill_name
             if skill_dir.exists():
@@ -1483,9 +1496,7 @@ def update(
                         adapter.install_root(), config_dir, set()
                     )
                 elif tui_kind == TuiKind.CODEX:
-                    _remove_stale_codex_files(
-                        adapter.install_root(), config_dir, set()
-                    )
+                    _remove_stale_codex_files(adapter.install_root(), config_dir, set())
                 agents, commands = build_specs(adapter)
                 _, relpaths = _install_tui_files(adapter, agents, commands)
                 if tui_kind == TuiKind.CLAUDE:

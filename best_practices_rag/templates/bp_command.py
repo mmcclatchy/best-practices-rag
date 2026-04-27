@@ -53,8 +53,8 @@ def _step5_params(mode: BpMode) -> list[tuple[str, str]]:
     ]
 
 
-def _step6_codegen() -> str:
-    return """### Step 6 - Output to user
+def _step6_codegen(rerun_example: str) -> str:
+    return f"""### Step 6 - Output to user
 
 Tell the user the output file path: `OUTPUT_FILE` (from the bp-pipeline completion signal). Do not read or print the file contents.
 
@@ -62,7 +62,7 @@ If `EXTRA_TECHS_FROM_PIPELINE` is non-empty, append this note:
 
 > **Note:** These results cover [EXTRA_TECHS_FROM_PIPELINE joined by " + "] in addition to what you queried. This
 > document assumes [EXTRA_TECHS_FROM_PIPELINE] as the implementation layer. Re-run with explicit technology names
-> (e.g., `/bp fastapi redis async session`) for different patterns."""
+> (e.g., `{rerun_example}`) for different patterns."""
 
 
 def _step6_research() -> str:
@@ -93,8 +93,16 @@ def generate_bp_command(adapter: TuiAdapter, mode: BpMode) -> str:
         params=_step5_params(mode),
     )
 
+    invoke_example = adapter.render_command_invocation(mode.command_name, "<query>")
+    usage_example = adapter.render_command_invocation(mode.command_name, "$ARGUMENTS")
+    rerun_example = adapter.render_command_invocation(
+        BpMode.CODEGEN.command_name,
+        "fastapi redis async session",
+    )
     slug_mode_flag = " --mode research" if mode == BpMode.RESEARCH else ""
-    step6 = _step6_codegen() if mode == BpMode.CODEGEN else _step6_research()
+    step6 = (
+        _step6_codegen(rerun_example) if mode == BpMode.CODEGEN else _step6_research()
+    )
     signal_parse = (
         _step5_signal_parse_codegen()
         if mode == BpMode.CODEGEN
@@ -104,12 +112,12 @@ def generate_bp_command(adapter: TuiAdapter, mode: BpMode) -> str:
     return f"""\
 # {mode.display_title}
 
-Use this command to search for software engineering best practices, technology integration patterns, framework usage guidance, and library configuration recommendations. Invoke as `/{mode.command_name} <query>`.
+Use this command to search for software engineering best practices, technology integration patterns, framework usage guidance, and library configuration recommendations. Invoke as `{invoke_example}`.
 
 ## Usage
 
 ```text
-/{mode.command_name} $ARGUMENTS
+{usage_example}
 ```
 
 ## Configuration
@@ -233,7 +241,7 @@ bp-pipeline will skip Steps 0-6 and go directly to synthesis.
 
 Build the versioned primary query string and append `"official documentation"`: e.g., `"FastAPI 0.116 async session management SQLAlchemy 2.0 official documentation"`.
 
-Delegate to the `bp-pipeline` agent using Task:
+Delegate to the `bp-pipeline` agent:
 
 {pipeline_invocation}
 

@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from best_practices_rag.agent_defs import build_specs
 from best_practices_rag.templates.bp_command import generate_bp_command
 from best_practices_rag.templates.bp_pipeline_agent import generate_bp_pipeline_agent
 from best_practices_rag.tui import BpMode, ClaudeCodeAdapter, CodexAdapter, ModelConfig
@@ -112,12 +113,42 @@ def _make_codex_adapter() -> CodexAdapter:
 
 
 class TestCodexAdapterTemplates:
-    def test_generate_bp_command_codex_contains_invoke_skill(self) -> None:
+    def test_generate_bp_command_codex_contains_agent_delegation(self) -> None:
         adapter = _make_codex_adapter()
         result = generate_bp_command(adapter, BpMode.CODEGEN)
-        assert "Invoke the 'bp-pipeline' skill" in result
+        assert "Spawn or delegate to the 'bp-pipeline' agent" in result
+        assert "Invoke the 'bp-pipeline' skill" not in result
 
     def test_generate_bp_command_codex_no_task_block(self) -> None:
         adapter = _make_codex_adapter()
         result = generate_bp_command(adapter, BpMode.CODEGEN)
         assert "Task(bp-pipeline):" not in result
+
+    def test_generate_bp_command_codex_uses_dollar_invocation(self) -> None:
+        adapter = _make_codex_adapter()
+        result = generate_bp_command(adapter, BpMode.CODEGEN)
+        assert "Invoke as `$bp <query>`" in result
+        assert "$bp $ARGUMENTS" in result
+        assert "$bp fastapi redis async session" in result
+        assert "Invoke as `/bp <query>`" not in result
+        assert "/bp $ARGUMENTS" not in result
+        assert "/bp fastapi redis async session" not in result
+
+    def test_generate_bpr_command_codex_uses_dollar_invocation(self) -> None:
+        adapter = _make_codex_adapter()
+        result = generate_bp_command(adapter, BpMode.RESEARCH)
+        assert "Invoke as `$bpr <query>`" in result
+        assert "$bpr $ARGUMENTS" in result
+        assert "Invoke as `/bpr <query>`" not in result
+        assert "/bpr $ARGUMENTS" not in result
+
+
+class TestBuildSpecs:
+    def test_codex_build_specs_generates_bp_and_bpr_skills(self) -> None:
+        adapter = _make_codex_adapter()
+        agents, commands = build_specs(adapter)
+        assert [command.name for command in commands] == ["bp", "bpr"]
+        assert "$bp <query>" in commands[0].body
+        assert "$bpr <query>" in commands[1].body
+        assert agents[0].name == "bp-pipeline"
+        assert "$bp or $bpr detects" in agents[0].description

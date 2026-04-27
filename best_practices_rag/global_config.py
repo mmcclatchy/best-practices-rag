@@ -8,19 +8,20 @@ GLOBAL_MODELS_PATH = GLOBAL_CONFIG_DIR / "models.json"
 GLOBAL_API_KEYS_PATH = GLOBAL_CONFIG_DIR / "api_keys.json"
 
 
-def load_global_models() -> dict[str, str]:
+def load_global_models(provider: str = "opencode") -> dict[str, str]:
     if not GLOBAL_MODELS_PATH.exists():
         return {}
     try:
         data: dict[str, Any] = json.loads(
             GLOBAL_MODELS_PATH.read_text(encoding="utf-8")
         )
-        return data.get("opencode", {})
+        section = data.get(provider, {})
+        return section if isinstance(section, dict) else {}
     except (json.JSONDecodeError, OSError):
         return {}
 
 
-def save_global_models(models: dict[str, str]) -> None:
+def save_global_models(models: dict[str, str], provider: str = "opencode") -> None:
     GLOBAL_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     existing: dict[str, Any] = {}
     if GLOBAL_MODELS_PATH.exists():
@@ -28,7 +29,7 @@ def save_global_models(models: dict[str, str]) -> None:
             existing = json.loads(GLOBAL_MODELS_PATH.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             pass
-    existing["opencode"] = models
+    existing[provider] = models
     GLOBAL_MODELS_PATH.write_text(json.dumps(existing, indent=2), encoding="utf-8")
 
 

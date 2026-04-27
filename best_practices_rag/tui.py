@@ -277,7 +277,7 @@ class OpenCodeAdapter(TuiAdapter):
 
     @classmethod
     def get_default_config(cls) -> ModelConfig:
-        models = load_global_models()
+        models = load_global_models("opencode")
         return ModelConfig(
             reasoning_model=models.get("reasoning", "anthropic/claude-opus-4-6"),
             task_model=models.get("task", "anthropic/claude-sonnet-4-6"),
@@ -434,7 +434,11 @@ class OpenCodeAdapter(TuiAdapter):
 class CodexAdapter(TuiAdapter):
     @classmethod
     def get_default_config(cls) -> ModelConfig:
-        return ModelConfig(reasoning_model="o4-mini", task_model="o4-mini")
+        models = load_global_models("codex")
+        return ModelConfig(
+            reasoning_model=models.get("reasoning", "o4-mini"),
+            task_model=models.get("task", "o4-mini"),
+        )
 
     @classmethod
     def detect_installed(cls) -> bool:

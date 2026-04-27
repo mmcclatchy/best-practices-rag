@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from best_practices_rag import global_config
 from best_practices_rag.tui import (
     AgentSpec,
     BpMode,
@@ -353,6 +354,50 @@ class TestAdapterRegistry:
     def test_register_adapter_is_callable(self) -> None:
         assert callable(register_adapter)
 
+    def test_opencode_adapter_reads_opencode_global_models(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        config_dir = tmp_path / ".config" / "best-practices-rag"
+        monkeypatch.setattr(global_config, "GLOBAL_CONFIG_DIR", config_dir)
+        monkeypatch.setattr(
+            global_config, "GLOBAL_MODELS_PATH", config_dir / "models.json"
+        )
+        global_config.save_global_models(
+            {"reasoning": "open-reason", "task": "open-task"},
+            provider="opencode",
+        )
+        global_config.save_global_models(
+            {"reasoning": "codex-reason", "task": "codex-task"},
+            provider="codex",
+        )
+
+        adapter = get_adapter(TuiKind.OPENCODE)
+
+        assert adapter.reasoning_model == "open-reason"
+        assert adapter.task_model == "open-task"
+
+    def test_codex_adapter_reads_codex_global_models(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        config_dir = tmp_path / ".config" / "best-practices-rag"
+        monkeypatch.setattr(global_config, "GLOBAL_CONFIG_DIR", config_dir)
+        monkeypatch.setattr(
+            global_config, "GLOBAL_MODELS_PATH", config_dir / "models.json"
+        )
+        global_config.save_global_models(
+            {"reasoning": "open-reason", "task": "open-task"},
+            provider="opencode",
+        )
+        global_config.save_global_models(
+            {"reasoning": "codex-reason", "task": "codex-task"},
+            provider="codex",
+        )
+
+        adapter = get_adapter(TuiKind.CODEX)
+
+        assert adapter.reasoning_model == "codex-reason"
+        assert adapter.task_model == "codex-task"
+
 
 # ---------------------------------------------------------------------------
 # detect_tuis
@@ -623,6 +668,25 @@ class TestCodexAdapter:
         assert data["model"] == "o4-mini"
         assert data["sandbox_mode"] == "workspace-write"
         assert data["developer_instructions"] == "body content\ncommand \\\nnext\n"
+
+    def test_render_agent_uses_configured_task_model(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        adapter = CodexAdapter(
+            ModelConfig(reasoning_model="codex-reason", task_model="codex-task")
+        )
+        spec = AgentSpec(
+            name="bp-pipeline",
+            description="Pipeline",
+            model_type=ModelType.TASK,
+            tools=[],
+            body="body content",
+        )
+
+        data = tomllib.loads(adapter.render_agent(spec))
+
+        assert data["model"] == "codex-task"
 
     def test_render_command_generates_frontmatter(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

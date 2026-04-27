@@ -6,10 +6,12 @@ from pathlib import Path
 import pytest
 from neo4j.exceptions import AuthError, ServiceUnavailable
 from pytest_mock import MockerFixture
+from typer.testing import CliRunner
 
+from best_practices_rag import global_config
 from best_practices_rag.cli import _generate_slug
-from best_practices_rag.cli import _remove_stale_codex_files
 from best_practices_rag.cli import _resolve_exa_num_results
+from best_practices_rag.cli import app
 from best_practices_rag.cli import check
 from best_practices_rag.cli import logs
 from best_practices_rag.cli import main
@@ -21,6 +23,17 @@ from best_practices_rag.cli import uninstall
 from best_practices_rag.cli import update
 from best_practices_rag.cli import version
 from best_practices_rag.search import ExaSearchError
+from best_practices_rag.tui_install import _remove_stale_codex_files
+
+
+runner = CliRunner()
+
+
+def _patch_global_model_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    config_dir = tmp_path / ".config" / "best-practices-rag"
+    monkeypatch.setattr(global_config, "GLOBAL_CONFIG_DIR", config_dir)
+    monkeypatch.setattr(global_config, "GLOBAL_MODELS_PATH", config_dir / "models.json")
+    return config_dir / "models.json"
 
 
 class TestGenerateSlug:
@@ -103,6 +116,85 @@ def test_setup_schema_registered_as_subcommand() -> None:
     assert exc_info.value.code == 0
 
 
+def test_models_opencode_direct_saves_provider_models(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    models_path = _patch_global_model_paths(monkeypatch, tmp_path)
+
+    result = runner.invoke(
+        app,
+        [
+            "models",
+            "opencode",
+            "--reasoning-model",
+            "open-reason",
+            "--task-model",
+            "open-task",
+        ],
+    )
+
+    assert result.exit_code == 0
+    data = json.loads(models_path.read_text())
+    assert data["opencode"] == {"reasoning": "open-reason", "task": "open-task"}
+
+
+def test_opencode_models_command_removed() -> None:
+    result = runner.invoke(app, ["opencode-models", "--help"])
+
+    assert result.exit_code != 0
+
+
+def test_models_codex_direct_no_apply_saves_without_artifacts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    models_path = _patch_global_model_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    result = runner.invoke(
+        app,
+        [
+            "models",
+            "codex",
+            "--reasoning-model",
+            "codex-reason",
+            "--task-model",
+            "codex-task",
+            "--no-apply",
+        ],
+    )
+
+    assert result.exit_code == 0
+    data = json.loads(models_path.read_text())
+    assert data["codex"] == {"reasoning": "codex-reason", "task": "codex-task"}
+    assert not (tmp_path / ".codex" / "agents" / "bp-pipeline.toml").exists()
+
+
+def test_models_codex_direct_auto_apply_generates_task_model_agent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    models_path = _patch_global_model_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    result = runner.invoke(
+        app,
+        [
+            "models",
+            "codex",
+            "--reasoning-model",
+            "codex-reason",
+            "--task-model",
+            "codex-task",
+        ],
+    )
+
+    assert result.exit_code == 0
+    data = json.loads(models_path.read_text())
+    assert data["codex"] == {"reasoning": "codex-reason", "task": "codex-task"}
+    agent_file = tmp_path / ".codex" / "agents" / "bp-pipeline.toml"
+    assert agent_file.exists()
+    assert 'model = "codex-task"' in agent_file.read_text()
+
+
 def test_setup_standalone_creates_global_files(
     mocker: MockerFixture,
     capsys: pytest.CaptureFixture[str],
@@ -112,7 +204,7 @@ def test_setup_standalone_creates_global_files(
     mocker.patch(
         "best_practices_rag.cli._bundle_root", return_value=tmp_path / "bundle"
     )
-    mocker.patch("best_practices_rag.cli._copy_tree", return_value=[])
+    mocker.patch("best_practices_rag.tui_install._copy_tree", return_value=[])
     mocker.patch("best_practices_rag.cli._setup_docker_neo4j")
 
     bundle = tmp_path / "bundle"
@@ -147,7 +239,7 @@ def test_setup_existing_neo4j_skips_docker(
     mocker.patch(
         "best_practices_rag.cli._bundle_root", return_value=tmp_path / "bundle"
     )
-    mocker.patch("best_practices_rag.cli._copy_tree", return_value=[])
+    mocker.patch("best_practices_rag.tui_install._copy_tree", return_value=[])
     mock_setup_main = mocker.patch("best_practices_rag.cli.run_migrations")
     mock_docker = mocker.patch("best_practices_rag.cli._setup_docker_neo4j")
 
@@ -178,7 +270,7 @@ def test_setup_force_overwrites(
     mocker.patch(
         "best_practices_rag.cli._bundle_root", return_value=tmp_path / "bundle"
     )
-    mocker.patch("best_practices_rag.cli._copy_tree", return_value=[])
+    mocker.patch("best_practices_rag.tui_install._copy_tree", return_value=[])
     mocker.patch("best_practices_rag.cli._setup_docker_neo4j")
 
     bundle = tmp_path / "bundle"
@@ -378,7 +470,7 @@ def test_setup_opencode_creates_prompts_and_json(
     mocker.patch(
         "best_practices_rag.cli._bundle_root", return_value=tmp_path / "bundle"
     )
-    mocker.patch("best_practices_rag.cli._copy_tree", return_value=[])
+    mocker.patch("best_practices_rag.tui_install._copy_tree", return_value=[])
     mocker.patch("best_practices_rag.cli._setup_docker_neo4j")
 
     bundle = tmp_path / "bundle"
@@ -427,7 +519,7 @@ def test_setup_opencode_writes_manifest(
     mocker.patch(
         "best_practices_rag.cli._bundle_root", return_value=tmp_path / "bundle"
     )
-    mocker.patch("best_practices_rag.cli._copy_tree", return_value=[])
+    mocker.patch("best_practices_rag.tui_install._copy_tree", return_value=[])
     mocker.patch("best_practices_rag.cli._setup_docker_neo4j")
 
     bundle = tmp_path / "bundle"
@@ -864,7 +956,7 @@ def test_setup_with_exa_api_key(
     mocker.patch(
         "best_practices_rag.cli._bundle_root", return_value=tmp_path / "bundle"
     )
-    mocker.patch("best_practices_rag.cli._copy_tree", return_value=[])
+    mocker.patch("best_practices_rag.tui_install._copy_tree", return_value=[])
     mocker.patch("best_practices_rag.cli._setup_docker_neo4j")
 
     bundle = tmp_path / "bundle"
@@ -894,7 +986,7 @@ def test_setup_with_neo4j_port(
     mocker.patch(
         "best_practices_rag.cli._bundle_root", return_value=tmp_path / "bundle"
     )
-    mocker.patch("best_practices_rag.cli._copy_tree", return_value=[])
+    mocker.patch("best_practices_rag.tui_install._copy_tree", return_value=[])
     mock_docker = mocker.patch("best_practices_rag.cli._setup_docker_neo4j")
 
     bundle = tmp_path / "bundle"
@@ -926,7 +1018,7 @@ def test_setup_without_exa_key_prints_instructions(
     mocker.patch(
         "best_practices_rag.cli._bundle_root", return_value=tmp_path / "bundle"
     )
-    mocker.patch("best_practices_rag.cli._copy_tree", return_value=[])
+    mocker.patch("best_practices_rag.tui_install._copy_tree", return_value=[])
     mocker.patch("best_practices_rag.cli._setup_docker_neo4j")
 
     bundle = tmp_path / "bundle"
@@ -1102,7 +1194,7 @@ def test_remove_stale_codex_files_removes_legacy_bp_pipeline_skill(
 
 
 def test_read_manifest_returns_dict_with_codex_files(tmp_path: Path) -> None:
-    from best_practices_rag.cli import _read_manifest, _write_manifest
+    from best_practices_rag.tui_install import _read_manifest, _write_manifest
 
     config_dir = tmp_path / ".config" / "best-practices-rag"
     config_dir.mkdir(parents=True)
@@ -1122,7 +1214,7 @@ def test_read_manifest_returns_dict_with_codex_files(tmp_path: Path) -> None:
 
 
 def test_read_manifest_missing_returns_empty_dict(tmp_path: Path) -> None:
-    from best_practices_rag.cli import _read_manifest
+    from best_practices_rag.tui_install import _read_manifest
 
     config_dir = tmp_path / "nonexistent"
     result = _read_manifest(config_dir)

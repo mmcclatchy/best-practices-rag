@@ -82,7 +82,24 @@ def run(
     no_cache: bool = typer.Option(
         False, "--no-cache", help="Bypass cached API responses"
     ),
+    reasoning_model: str | None = typer.Option(
+        None, "--reasoning-model", help="Set reasoning model directly"
+    ),
+    task_model: str | None = typer.Option(
+        None, "--task-model", help="Set task model directly"
+    ),
 ) -> int:
+    if reasoning_model or task_model:
+        mapping = _build_direct_mapping(reasoning_model, task_model)
+        save_global_models(mapping, provider="opencode")
+        console.print(
+            f"\n[bold green]✓[/bold green] Saved to [cyan]{_config_path()}[/cyan]"
+        )
+        print_info(
+            "Run 'best-practices-rag setup --tui opencode' to apply new models to your config"
+        )
+        return 0
+
     aa_key_val = (
         aa_key
         or os.environ.get("ARTIFICIAL_ANALYSIS_API_KEY", "")
@@ -150,7 +167,7 @@ def run(
             print_warning("Mapping not saved")
             return 1
 
-    save_global_models(mapping)
+    save_global_models(mapping, provider="opencode")
     console.print(
         f"\n[bold green]✓[/bold green] Saved to [cyan]{_config_path()}[/cyan]"
     )
@@ -166,6 +183,15 @@ def _discover_models() -> tuple[str, list[str]]:
         return "", []
     models = _list_models(provider)
     return provider, models
+
+
+def _build_direct_mapping(
+    reasoning_model: str | None,
+    task_model: str | None,
+) -> dict[str, str]:
+    reasoning = str(reasoning_model or task_model or "").strip()
+    task = str(task_model or reasoning_model or "").strip()
+    return {"reasoning": reasoning, "task": task}
 
 
 def _detect_provider() -> str:

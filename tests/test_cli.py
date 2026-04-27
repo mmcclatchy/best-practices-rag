@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -281,20 +282,34 @@ def test_update_uses_uv(
 ) -> None:
     mocker.patch(
         "best_practices_rag.cli.shutil.which",
-        side_effect=lambda x: "/usr/bin/uv" if x == "uv" else None,
+        side_effect=lambda x: {
+            "uv": "/usr/bin/uv",
+            "best-practices-rag": "/Users/test/.local/bin/best-practices-rag",
+        }.get(x),
     )
     mock_run = mocker.patch(
         "best_practices_rag.cli.subprocess.run",
         return_value=mocker.MagicMock(returncode=0),
     )
-    mock_schema = mocker.patch("best_practices_rag.cli._run_setup_schema")
-    mocker.patch("best_practices_rag.cli._install_tui_files", return_value=([], []))
-    mocker.patch("best_practices_rag.cli._copy_tree", return_value=[])
+    mock_exec = mocker.patch("best_practices_rag.cli.os.execvpe")
 
     update(tui="claude")
 
-    assert mock_run.call_args[0][0] == ["uv", "tool", "upgrade", "best-practices-rag"]
-    mock_schema.assert_called_once()
+    assert mock_run.call_args.args[0] == [
+        "uv",
+        "tool",
+        "upgrade",
+        "best-practices-rag",
+    ]
+    executable, argv, env = mock_exec.call_args.args
+    assert executable == "/Users/test/.local/bin/best-practices-rag"
+    assert argv == [
+        "/Users/test/.local/bin/best-practices-rag",
+        "update",
+        "--tui",
+        "claude",
+    ]
+    assert env["BEST_PRACTICES_RAG_UPDATE_REEXEC"] == "1"
 
 
 def test_update_falls_back_to_pipx(
@@ -302,24 +317,44 @@ def test_update_falls_back_to_pipx(
 ) -> None:
     mocker.patch(
         "best_practices_rag.cli.shutil.which",
-        side_effect=lambda x: None if x == "uv" else "/usr/bin/pipx",
+        side_effect=lambda x: {
+            "pipx": "/usr/bin/pipx",
+            "best-practices-rag": "/Users/test/.local/bin/best-practices-rag",
+        }.get(x),
     )
     mock_run = mocker.patch(
         "best_practices_rag.cli.subprocess.run",
         return_value=mocker.MagicMock(returncode=0),
     )
-    mock_schema = mocker.patch("best_practices_rag.cli._run_setup_schema")
-    mocker.patch("best_practices_rag.cli._install_tui_files", return_value=([], []))
-    mocker.patch("best_practices_rag.cli._copy_tree", return_value=[])
+    mock_exec = mocker.patch("best_practices_rag.cli.os.execvpe")
 
     update(tui="claude")
 
-    assert mock_run.call_args[0][0] == [
+    assert mock_run.call_args.args[0] == [
         "pipx",
         "upgrade",
         "best-practices-rag",
     ]
-    mock_schema.assert_called_once()
+    executable, argv, env = mock_exec.call_args.args
+    assert executable == "/Users/test/.local/bin/best-practices-rag"
+    assert argv == [
+        "/Users/test/.local/bin/best-practices-rag",
+        "update",
+        "--tui",
+        "claude",
+    ]
+    assert env["BEST_PRACTICES_RAG_UPDATE_REEXEC"] == "1"
+
+
+def test_update_reexec_env_refreshes_files_in_current_process(
+    mocker: MockerFixture,
+) -> None:
+    refresh = mocker.patch("best_practices_rag.cli._update_installed_files")
+    mocker.patch.dict(os.environ, {"BEST_PRACTICES_RAG_UPDATE_REEXEC": "1"})
+
+    update(tui="codex")
+
+    refresh.assert_called_once_with("codex")
 
 
 def test_update_exits_if_no_manager(
@@ -421,6 +456,57 @@ def test_setup_opencode_writes_manifest(
     assert "prompts/bp-pipeline.md" in manifest["opencode_files"]
     assert "prompts/bp.md" in manifest["opencode_files"]
     assert "opencode.json" in manifest["opencode_files"]
+
+
+def test_setup_single_tui_preserves_other_tui_manifest_entries(
+    mocker: MockerFixture,
+    tmp_path: Path,
+) -> None:
+    mocker.patch("pathlib.Path.home", return_value=tmp_path)
+    mocker.patch(
+        "best_practices_rag.cli._bundle_root", return_value=tmp_path / "bundle"
+    )
+    mocker.patch("best_practices_rag.cli._setup_docker_neo4j")
+
+    bundle = tmp_path / "bundle"
+    (bundle / "skills" / "best-practices-rag" / "references").mkdir(parents=True)
+    (
+        bundle / "skills" / "best-practices-rag" / "references" / "tech-versions.md"
+    ).write_text("")
+    (bundle / "infra").mkdir(parents=True)
+    (bundle / "infra" / ".env.example").write_text("# example\n")
+
+    claude_command = tmp_path / ".claude" / "commands" / "bp.md"
+    claude_command.parent.mkdir(parents=True)
+    claude_command.write_text("# BP\n")
+
+    config_dir = tmp_path / ".config" / "best-practices-rag"
+    config_dir.mkdir(parents=True)
+    (config_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "files": ["commands/bp.md"],
+                "opencode_files": ["prompts/bp.md"],
+                "codex_files": [],
+            }
+        )
+    )
+
+    setup(
+        force=False,
+        password=None,
+        neo4j_uri=None,
+        neo4j_username=None,
+        exa_api_key=None,
+        neo4j_port=None,
+        tui="codex",
+    )
+
+    manifest = json.loads((config_dir / "manifest.json").read_text())
+    assert claude_command.exists()
+    assert manifest["files"] == ["commands/bp.md"]
+    assert manifest["opencode_files"] == ["prompts/bp.md"]
+    assert "agents/bp-pipeline.toml" in manifest["codex_files"]
 
 
 def test_check_opencode_passes_when_files_present(

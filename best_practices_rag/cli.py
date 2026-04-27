@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 import secrets
 import shutil
 import subprocess
@@ -52,6 +53,8 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
 )
+
+_UPDATE_REEXEC_ENV = "BEST_PRACTICES_RAG_UPDATE_REEXEC"
 
 
 def _bundle_root() -> Path:
@@ -196,6 +199,49 @@ def _install_tui_files(
 def _compute_tui_relpaths(adapter: TuiAdapter) -> list[str]:
     agents, commands = build_specs(adapter)
     return adapter.installed_file_relpaths(agents, commands)
+
+
+def _refresh_installed_tui_files(
+    *,
+    tui: str,
+    config_dir: Path,
+    claude_dir: Path,
+    bundle: Path,
+) -> None:
+    tui_targets = resolve_tui_targets(tui)
+
+    _copy_tree(
+        bundle / "skills" / "best-practices-rag" / "references",
+        config_dir / "references",
+        force=True,
+    )
+
+    manifest = _read_manifest(config_dir)
+
+    if TuiKind.CLAUDE in tui_targets:
+        expected_claude = set(_compute_tui_relpaths(get_adapter(TuiKind.CLAUDE)))
+        _remove_stale_claude_files(claude_dir, config_dir, expected_claude)
+
+    claude_tui_files: set[str] = set(manifest["files"])
+    opencode_tui_files: set[str] = set(manifest["opencode_files"])
+    codex_tui_files: set[str] = set(manifest["codex_files"])
+
+    for tui_kind in tui_targets:
+        adapter = get_adapter(tui_kind)
+        if tui_kind == TuiKind.OPENCODE:
+            _remove_stale_opencode_files(adapter.install_root(), config_dir, set())
+        elif tui_kind == TuiKind.CODEX:
+            _remove_stale_codex_files(adapter.install_root(), config_dir, set())
+        agents, commands = build_specs(adapter)
+        _, relpaths = _install_tui_files(adapter, agents, commands)
+        if tui_kind == TuiKind.CLAUDE:
+            claude_tui_files = set(relpaths)
+        elif tui_kind == TuiKind.OPENCODE:
+            opencode_tui_files = set(relpaths)
+        elif tui_kind == TuiKind.CODEX:
+            codex_tui_files = set(relpaths)
+
+    _write_manifest(config_dir, claude_tui_files, opencode_tui_files, codex_tui_files)
 
 
 def _parse_frontmatter(text: str) -> dict[str, str] | None:
@@ -421,44 +467,12 @@ def setup(
     print("Installing best-practices-rag globally...\n")
 
     bundle = _bundle_root()
-    tui_targets = resolve_tui_targets(tui)
-
-    # Skills always install to ~/.claude/ (OpenCode reads via compat shim)
-    # Copy references to TUI-neutral location
-    _copy_tree(
-        bundle / "skills" / "best-practices-rag" / "references",
-        config_dir / "references",
-        force=True,
+    _refresh_installed_tui_files(
+        tui=tui,
+        config_dir=config_dir,
+        claude_dir=claude_dir,
+        bundle=bundle,
     )
-
-    # Compute expected Claude files for stale removal
-    if TuiKind.CLAUDE in tui_targets:
-        expected_claude = set(_compute_tui_relpaths(get_adapter(TuiKind.CLAUDE)))
-    else:
-        expected_claude = set()
-    _remove_stale_claude_files(claude_dir, config_dir, expected_claude)
-
-    # Install agents and commands per TUI
-    claude_tui_files: set[str] = set()
-    opencode_tui_files: set[str] = set()
-    codex_tui_files: set[str] = set()
-
-    for tui_kind in tui_targets:
-        adapter = get_adapter(tui_kind)
-        if tui_kind == TuiKind.OPENCODE:
-            _remove_stale_opencode_files(adapter.install_root(), config_dir, set())
-        elif tui_kind == TuiKind.CODEX:
-            _remove_stale_codex_files(adapter.install_root(), config_dir, set())
-        agents, commands = build_specs(adapter)
-        _, relpaths = _install_tui_files(adapter, agents, commands)
-        if tui_kind == TuiKind.CLAUDE:
-            claude_tui_files = set(relpaths)
-        elif tui_kind == TuiKind.OPENCODE:
-            opencode_tui_files = set(relpaths)
-        elif tui_kind == TuiKind.CODEX:
-            codex_tui_files = set(relpaths)
-
-    _write_manifest(config_dir, claude_tui_files, opencode_tui_files, codex_tui_files)
 
     env_example = config_dir / ".env.example"
     if not env_example.exists() or force:
@@ -1436,6 +1450,57 @@ def version() -> None:
     print(f"best-practices-rag v{__version__}")
 
 
+def _update_installed_files(tui: str) -> None:
+    print("\nUpdating skill files...")
+    config_dir = Path.home() / ".config" / "best-practices-rag"
+    claude_dir = Path.home() / ".claude"
+    bundle = _bundle_root()
+
+    _refresh_installed_tui_files(
+        tui=tui,
+        config_dir=config_dir,
+        claude_dir=claude_dir,
+        bundle=bundle,
+    )
+
+    compose_file = config_dir / "docker-compose.yml"
+    if compose_file.exists():
+        shutil.copy2(bundle / "infra" / "docker-compose.yml", compose_file)
+        print("  updated: docker-compose.yml")
+
+    env_file = config_dir / ".env"
+    uri = "bolt://localhost:7687"
+    username = "neo4j"
+    if env_file.exists():
+        for line in env_file.read_text().splitlines():
+            if line.startswith("NEO4J_URI="):
+                uri = line.split("=", 1)[1].strip()
+            elif line.startswith("NEO4J_USERNAME="):
+                username = line.split("=", 1)[1].strip()
+    pw_file = config_dir / "secrets" / "neo4j_password"
+
+    print("\nConnecting to Neo4j:")
+    print(f"  uri:        {uri}")
+    print(f"  username:   {username}")
+    print(f"  password:   {pw_file}")
+
+    print("\nApplying database schema...")
+    try:
+        _run_setup_schema()
+        print("Schema applied successfully.")
+    except ServiceUnavailable:
+        print(
+            "  [skip] Neo4j not reachable — schema will be applied on next setup or setup-schema"
+        )
+    except AuthError:
+        print(
+            "  [skip] Neo4j auth failed — check credentials in ~/.config/best-practices-rag/"
+        )
+    except Exception as e:
+        print(f"  [skip] Schema setup failed: {e}")
+        print("  You can retry later with: best-practices-rag setup-schema")
+
+
 @app.command()
 def update(
     tui: str = typer.Option(
@@ -1454,6 +1519,10 @@ def update(
         uv tool upgrade best-practices-rag
         pipx upgrade best-practices-rag
     """
+    if os.environ.get(_UPDATE_REEXEC_ENV) == "1":
+        _update_installed_files(tui)
+        return
+
     for manager, cmd in [
         ("uv", ["uv", "tool", "upgrade", "best-practices-rag"]),
         ("pipx", ["pipx", "upgrade", "best-practices-rag"]),
@@ -1464,89 +1533,17 @@ def update(
             if result.returncode != 0:
                 print(f"{manager} upgrade failed.", file=sys.stderr)
                 sys.exit(1)
-            print("\nUpdating skill files...")
-            config_dir = Path.home() / ".config" / "best-practices-rag"
-            claude_dir = Path.home() / ".claude"
-            bundle = _bundle_root()
-            tui_targets = resolve_tui_targets(tui)
-
-            # Copy references to TUI-neutral location
-            _copy_tree(
-                bundle / "skills" / "best-practices-rag" / "references",
-                config_dir / "references",
-                force=True,
-            )
-
-            # Compute expected Claude files for stale removal
-            if TuiKind.CLAUDE in tui_targets:
-                expected_claude = set(
-                    _compute_tui_relpaths(get_adapter(TuiKind.CLAUDE))
-                )
-            else:
-                expected_claude = set()
-            _remove_stale_claude_files(claude_dir, config_dir, expected_claude)
-
-            claude_tui_files: set[str] = set()
-            opencode_tui_files: set[str] = set()
-            codex_tui_files: set[str] = set()
-            for tui_kind in tui_targets:
-                adapter = get_adapter(tui_kind)
-                if tui_kind == TuiKind.OPENCODE:
-                    _remove_stale_opencode_files(
-                        adapter.install_root(), config_dir, set()
-                    )
-                elif tui_kind == TuiKind.CODEX:
-                    _remove_stale_codex_files(adapter.install_root(), config_dir, set())
-                agents, commands = build_specs(adapter)
-                _, relpaths = _install_tui_files(adapter, agents, commands)
-                if tui_kind == TuiKind.CLAUDE:
-                    claude_tui_files = set(relpaths)
-                elif tui_kind == TuiKind.OPENCODE:
-                    opencode_tui_files = set(relpaths)
-                elif tui_kind == TuiKind.CODEX:
-                    codex_tui_files = set(relpaths)
-
-            _write_manifest(
-                config_dir, claude_tui_files, opencode_tui_files, codex_tui_files
-            )
-
-            compose_file = config_dir / "docker-compose.yml"
-            if compose_file.exists():
-                shutil.copy2(bundle / "infra" / "docker-compose.yml", compose_file)
-                print("  updated: docker-compose.yml")
-
-            env_file = config_dir / ".env"
-            uri = "bolt://localhost:7687"
-            username = "neo4j"
-            if env_file.exists():
-                for line in env_file.read_text().splitlines():
-                    if line.startswith("NEO4J_URI="):
-                        uri = line.split("=", 1)[1].strip()
-                    elif line.startswith("NEO4J_USERNAME="):
-                        username = line.split("=", 1)[1].strip()
-            pw_file = config_dir / "secrets" / "neo4j_password"
-
-            print("\nConnecting to Neo4j:")
-            print(f"  uri:        {uri}")
-            print(f"  username:   {username}")
-            print(f"  password:   {pw_file}")
-
-            print("\nApplying database schema...")
-            try:
-                _run_setup_schema()
-                print("Schema applied successfully.")
-            except ServiceUnavailable:
-                print(
-                    "  [skip] Neo4j not reachable — schema will be applied on next setup or setup-schema"
-                )
-            except AuthError:
-                print(
-                    "  [skip] Neo4j auth failed — check credentials in ~/.config/best-practices-rag/"
-                )
-            except Exception as e:
-                print(f"  [skip] Schema setup failed: {e}")
-                print("  You can retry later with: best-practices-rag setup-schema")
-
+            executable = shutil.which("best-practices-rag") or "best-practices-rag"
+            reexec_env = os.environ.copy()
+            reexec_env[_UPDATE_REEXEC_ENV] = "1"
+            reexec_cmd = [
+                executable,
+                "update",
+                "--tui",
+                tui,
+            ]
+            print("\nRe-running updated command to refresh installed files...")
+            os.execvpe(executable, reexec_cmd, reexec_env)
             return
 
     print("Error: neither uv nor pipx found.", file=sys.stderr)

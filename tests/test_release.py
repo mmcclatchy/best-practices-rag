@@ -1,6 +1,10 @@
 from pathlib import Path
 
-from best_practices_rag._release import RELEASE_MANIFEST, _default_target
+from best_practices_rag._release import (
+    RELEASE_MANIFEST,
+    _RELEASE_PYPROJECT,
+    _default_target,
+)
 
 
 def test_release_manifest_includes_imported_top_level_modules() -> None:
@@ -27,3 +31,17 @@ def test_default_target_of_an_unsuffixed_checkout_is_itself() -> None:
     dev_root = Path("/home/someone/code/best-practices-rag")
 
     assert _default_target(dev_root) == dev_root
+
+
+def test_no_force_include_of_paths_inside_the_package() -> None:
+    """Both pyprojects, since the dev one is what gets built for local installs.
+
+    `packages = ["best_practices_rag"]` already carries everything under the
+    package, so force-including a subdirectory of it makes hatchling add each of
+    those files twice: "A second file is being added to the wheel archive at the
+    same path". Older hatchling tolerated it; current versions fail the build.
+    """
+    dev_pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
+
+    assert "force-include" not in dev_pyproject
+    assert "force-include" not in _RELEASE_PYPROJECT

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from best_practices_rag.tui import TuiAdapter
-
 from best_practices_rag.templates.bp_command import generate_bp_command
 from best_practices_rag.templates.bp_pipeline_agent import generate_bp_pipeline_agent
 from best_practices_rag.tui import AgentSpec, BpMode, CommandSpec, ModelType
+
+if TYPE_CHECKING:
+    from best_practices_rag.tui import TuiAdapter
 
 
 def build_specs(adapter: TuiAdapter) -> tuple[list[AgentSpec], list[CommandSpec]]:
@@ -35,6 +35,12 @@ def build_specs(adapter: TuiAdapter) -> tuple[list[AgentSpec], list[CommandSpec]
             name=mode.command_name,
             description=mode.description,
             body=generate_bp_command(adapter, mode),
+            tools=[
+                "Bash(best-practices-rag:*)",
+                "Read",
+                "Edit",
+                "Task",
+            ],
         )
         for mode in BpMode
     ]

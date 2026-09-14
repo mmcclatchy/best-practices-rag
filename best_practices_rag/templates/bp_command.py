@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from best_practices_rag.tui import BpMode
+
 if TYPE_CHECKING:
     from best_practices_rag.tui import TuiAdapter
-
-from best_practices_rag.tui import BpMode
 
 
 def _step5_params(mode: BpMode) -> list[tuple[str, str]]:

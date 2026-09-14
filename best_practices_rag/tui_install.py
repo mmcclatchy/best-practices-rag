@@ -33,19 +33,30 @@ def _copy_tree(src: Path, dst: Path, *, force: bool) -> list[str]:
     return copied
 
 
+def _empty_manifest() -> dict[str, list[str]]:
+    return {
+        "files": [],
+        "opencode_files": [],
+        "codex_files": [],
+        "claude_permissions": [],
+    }
+
+
 def _read_manifest(config_dir: Path) -> dict[str, list[str]]:
     path = config_dir / "manifest.json"
     if not path.exists():
-        return {"files": [], "opencode_files": [], "codex_files": []}
+        return _empty_manifest()
     try:
         data = json.loads(path.read_text())
         return {
             "files": data.get("files", []),
             "opencode_files": data.get("opencode_files", []),
             "codex_files": data.get("codex_files", []),
+            # Absent in manifests written before permissions were installed.
+            "claude_permissions": data.get("claude_permissions", []),
         }
     except Exception:
-        return {"files": [], "opencode_files": [], "codex_files": []}
+        return _empty_manifest()
 
 
 def _write_manifest(
@@ -53,6 +64,7 @@ def _write_manifest(
     claude_files: set[str],
     opencode_files: set[str] | None = None,
     codex_files: set[str] | None = None,
+    claude_permissions: list[str] | None = None,
 ) -> None:
     (config_dir / "manifest.json").write_text(
         json.dumps(
@@ -61,6 +73,7 @@ def _write_manifest(
                 "files": sorted(claude_files),
                 "opencode_files": sorted(opencode_files or set()),
                 "codex_files": sorted(codex_files or set()),
+                "claude_permissions": list(claude_permissions or []),
             },
             indent=2,
         )
@@ -167,6 +180,7 @@ def _refresh_installed_tui_files(
     claude_tui_files: set[str] = set(manifest["files"])
     opencode_tui_files: set[str] = set(manifest["opencode_files"])
     codex_tui_files: set[str] = set(manifest["codex_files"])
+    claude_permissions: list[str] = list(manifest["claude_permissions"])
 
     for tui_kind in tui_targets:
         adapter = get_adapter(tui_kind)
@@ -178,9 +192,16 @@ def _refresh_installed_tui_files(
         _, relpaths = _install_tui_files(adapter, agents, commands)
         if tui_kind == TuiKind.CLAUDE:
             claude_tui_files = set(relpaths)
+            claude_permissions = adapter.permission_rules()
         elif tui_kind == TuiKind.OPENCODE:
             opencode_tui_files = set(relpaths)
         elif tui_kind == TuiKind.CODEX:
             codex_tui_files = set(relpaths)
 
-    _write_manifest(config_dir, claude_tui_files, opencode_tui_files, codex_tui_files)
+    _write_manifest(
+        config_dir,
+        claude_tui_files,
+        opencode_tui_files,
+        codex_tui_files,
+        claude_permissions,
+    )

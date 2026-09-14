@@ -23,7 +23,11 @@ from best_practices_rag.cli import uninstall
 from best_practices_rag.cli import update
 from best_practices_rag.cli import version
 from best_practices_rag.search import ExaSearchError
+from best_practices_rag.tui import TuiKind, get_adapter
 from best_practices_rag.tui_install import _remove_stale_codex_files
+
+
+from best_practices_rag.tui_install import _read_manifest, _write_manifest
 
 
 runner = CliRunner()
@@ -316,6 +320,13 @@ def test_cmd_check_validates_global_claude_dir(
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("")
 
+    settings = {
+        "permissions": {
+            "allow": get_adapter(TuiKind.CLAUDE).permission_rules(),
+        }
+    }
+    (claude_dir / "settings.json").write_text(json.dumps(settings))
+
     config_dir = tmp_path / ".config" / "best-practices-rag"
     for f in [
         "bp-pipeline-interface.md",
@@ -506,7 +517,7 @@ def test_setup_opencode_creates_prompts_and_json(
     assert "bp-pipeline" in config["agent"]
     assert "bp" in config["command"]
     assert config["agent"]["bp-pipeline"]["mode"] == "subagent"
-    assert config["agent"]["bp-pipeline"]["model"] == "opencode-go/minimax-m2.7"
+    assert config["agent"]["bp-pipeline"]["model"] == "anthropic/claude-sonnet-4-6"
 
 
 def test_setup_opencode_writes_manifest(
@@ -1194,8 +1205,6 @@ def test_remove_stale_codex_files_removes_legacy_bp_pipeline_skill(
 
 
 def test_read_manifest_returns_dict_with_codex_files(tmp_path: Path) -> None:
-    from best_practices_rag.tui_install import _read_manifest, _write_manifest
-
     config_dir = tmp_path / ".config" / "best-practices-rag"
     config_dir.mkdir(parents=True)
 
@@ -1214,8 +1223,11 @@ def test_read_manifest_returns_dict_with_codex_files(tmp_path: Path) -> None:
 
 
 def test_read_manifest_missing_returns_empty_dict(tmp_path: Path) -> None:
-    from best_practices_rag.tui_install import _read_manifest
-
     config_dir = tmp_path / "nonexistent"
     result = _read_manifest(config_dir)
-    assert result == {"files": [], "opencode_files": [], "codex_files": []}
+    assert result == {
+        "files": [],
+        "opencode_files": [],
+        "codex_files": [],
+        "claude_permissions": [],
+    }

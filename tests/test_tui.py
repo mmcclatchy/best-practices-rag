@@ -146,7 +146,8 @@ class TestClaudeCodeAdapter:
         written = adapter.write_all(agents, commands)
         assert (tmp_path / ".claude" / "agents" / "bp-pipeline.md").exists()
         assert (tmp_path / ".claude" / "commands" / "bp.md").exists()
-        assert len(written) == 2
+        # agent + command + settings.json
+        assert len(written) == 3
 
     def test_installed_file_relpaths(self) -> None:
         config = ModelConfig(reasoning_model="opus", task_model="sonnet")

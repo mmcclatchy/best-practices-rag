@@ -11,7 +11,6 @@ _ALLOWED_RELATION_LABELS = frozenset({"APPLIES_TO", "VERSION_OF"})
 
 
 def store_results(bundle: GraphBundle, graph_store: GraphStore) -> int:
-    """Merge all nodes and relations from bundle into Neo4j using UNWIND batches."""
     logger.info(
         "Storage started — %d nodes, %d relations",
         len(bundle.nodes),
@@ -31,7 +30,9 @@ def _batch_merge_nodes(nodes: list[EntityNode], graph_store: GraphStore) -> None
         {
             "name": node.name,
             "label": node.label,
-            "props": {k: v for k, v in (node.properties or {}).items() if v is not None},
+            "props": {
+                k: v for k, v in (node.properties or {}).items() if v is not None
+            },
         }
         for node in nodes
     ]

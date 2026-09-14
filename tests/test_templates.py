@@ -7,6 +7,7 @@ from best_practices_rag.templates.bp_command import generate_bp_command
 from best_practices_rag.templates.bp_pipeline_agent import generate_bp_pipeline_agent
 from best_practices_rag.tui import BpMode, ClaudeCodeAdapter, CodexAdapter, ModelConfig
 
+
 FIXTURES = Path(__file__).parent / "fixtures"
 
 

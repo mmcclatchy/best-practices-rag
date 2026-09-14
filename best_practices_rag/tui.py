@@ -2,6 +2,7 @@
 
 import json
 import shutil
+import subprocess
 import tomllib
 from abc import ABC, abstractmethod
 from enum import StrEnum
@@ -68,6 +69,7 @@ class CommandSpec(BaseModel):
     name: str
     description: str
     body: str
+    tools: list[str] = []
 
 
 _BUILTIN_TOOL_MAP: dict[str, str] = {
@@ -148,13 +150,51 @@ class TuiAdapter(ABC):
         params: list[tuple[str, str]],
     ) -> str: ...
 
+    def permission_rules(self) -> list[str]:
+        return []
+
     def remove_entries(
         self,
         agents: list[AgentSpec],
         commands: list[CommandSpec],
+        *,
+        rules: list[str] | None = None,
     ) -> None:
-        """Remove agent and command entries from config. Override for TUI-specific behavior."""
+        """Remove agent and command entries from config. Override for TUI-specific behavior.
+
+        `rules` carries the permission rules recorded in the install manifest, for
+        adapters that write them. The manifest helpers live in tui_install, which
+        imports this module, so they are passed in rather than read here.
+        """
         pass
+
+
+# Permission rules the Claude Code install needs so /bp and /bpr run unprompted.
+#
+# Only Edit(...) and Read(...) path rules are consulted by Claude Code's file
+# permission checks — Write(...), MultiEdit(...), NotebookEdit(...) and Glob(...)
+# rules are inert and trigger a startup warning. See test_no_inert_permission_rules.
+#
+# Path anchoring in *user-level* settings.json: a bare relative pattern resolves
+# against the session's working directory (the open project), while a leading "/"
+# would resolve against ~/.claude/. Absolute paths therefore need a double slash.
+_CLAUDE_PERMISSION_RULES: list[str] = [
+    # Every best-practices-rag subcommand the command/agent templates shell out to.
+    "Bash(best-practices-rag:*)",
+    # Synthesis output documents, relative to whichever project is open.
+    "Edit(.best-practices/**)",
+    "Read(.best-practices/**)",
+    # Intermediate files the pipeline writes via --output-file and reads back.
+    "Read(//tmp/bp_exa_primary.md)",
+    "Read(//tmp/bp_exa_failures.md)",
+    "Read(//tmp/bp_exa_authority.md)",
+    "Read(//tmp/bp_kb_bodies.txt)",
+    # Documentation lookups performed by the bp-pipeline agent.
+    "mcp__context7",
+]
+
+_CONTEXT7_MCP_NAME = "context7"
+_CONTEXT7_MCP_PACKAGE = "@upstash/context7-mcp"
 
 
 class ClaudeCodeAdapter(TuiAdapter):
@@ -164,6 +204,12 @@ description: {description}
 model: {model}
 tools: {tools}
 color: {color}
+---
+
+{body}"""
+
+    _COMMAND_TEMPLATE = """---
+description: {description}{allowed_tools}
 ---
 
 {body}"""
@@ -216,10 +262,110 @@ color: {color}
         )
 
     def render_command(self, spec: CommandSpec) -> str:
-        return spec.body
+        # allowed-tools grants the listed tools for the turn the command is invoked;
+        # it supplements the settings.json rules rather than replacing them.
+        allowed_tools = (
+            f"\nallowed-tools: {', '.join(spec.tools)}" if spec.tools else ""
+        )
+        return self._COMMAND_TEMPLATE.format(
+            description=spec.description,
+            allowed_tools=allowed_tools,
+            body=spec.body,
+        )
 
     def render_command_invocation(self, command_name: str, args: str) -> str:
         return f"/{command_name} {args}".rstrip()
+
+    def settings_path(self) -> Path:
+        return self.install_root() / "settings.json"
+
+    def _merge_settings_json(self) -> Path | None:
+        """Add the permission rules to ~/.claude/settings.json, preserving everything else.
+
+        Returns the settings path on success, None if the file could not be read.
+        Unlike the OpenCode merge, an unparseable file is left untouched rather than
+        replaced — this file is the user's global Claude Code configuration.
+        """
+        settings_path = self.settings_path()
+        settings: dict[str, Any] = {}
+
+        if settings_path.exists():
+            try:
+                settings = json.loads(settings_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError) as exc:
+                print(f"  [skip] could not read {settings_path}: {exc}")
+                print("    Add these rules to permissions.allow by hand:")
+                for rule in _CLAUDE_PERMISSION_RULES:
+                    print(f"      {rule}")
+                return None
+
+        permissions: dict[str, Any] = settings.setdefault("permissions", {})
+        allow: list[str] = permissions.setdefault("allow", [])
+
+        added = [rule for rule in _CLAUDE_PERMISSION_RULES if rule not in allow]
+        allow.extend(added)
+
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        settings_path.write_text(
+            json.dumps(settings, indent=2) + "\n", encoding="utf-8"
+        )
+        if added:
+            print(f"  updated: {settings_path} (+{len(added)} permission rules)")
+        else:
+            print(f"  up to date: {settings_path}")
+        return settings_path
+
+    def _register_context7_mcp(self) -> None:
+        """Register the context7 MCP server via the claude CLI.
+
+        ~/.claude.json is live state owned by Claude Code, so it is never edited
+        directly. A failure here is a warning, not a failed install — the pipeline
+        degrades to Exa search and training knowledge without context7.
+        """
+        claude_bin = shutil.which("claude")
+        if claude_bin is None:
+            print("  [skip] claude not on PATH — context7 MCP server not registered")
+            return
+
+        listed = subprocess.run(
+            [claude_bin, "mcp", "list"],
+            capture_output=True,
+            text=True,
+        )
+        # `claude mcp list` prints one "<name>: <command or url> - <status>" line per
+        # server. Anchor on the name at line start — a bare substring test also matches
+        # the package name in another server's command line.
+        already_registered = listed.returncode == 0 and any(
+            line.strip().startswith(f"{_CONTEXT7_MCP_NAME}:")
+            for line in listed.stdout.splitlines()
+        )
+        if already_registered:
+            print(f"  up to date: MCP server '{_CONTEXT7_MCP_NAME}'")
+            return
+
+        added = subprocess.run(
+            [
+                claude_bin,
+                "mcp",
+                "add",
+                "-s",
+                "user",
+                _CONTEXT7_MCP_NAME,
+                "--",
+                "npx",
+                "-y",
+                _CONTEXT7_MCP_PACKAGE,
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if added.returncode == 0:
+            print(f"  registered: MCP server '{_CONTEXT7_MCP_NAME}'")
+        else:
+            print(
+                f"  [skip] could not register MCP server '{_CONTEXT7_MCP_NAME}': "
+                f"{added.stderr.strip()}"
+            )
 
     def write_all(
         self,
@@ -245,6 +391,11 @@ color: {color}
             files_written.append(file_path)
             print(f"  copied: {file_path}")
 
+        settings_path = self._merge_settings_json()
+        if settings_path is not None:
+            files_written.append(settings_path)
+        self._register_context7_mcp()
+
         return files_written
 
     def installed_file_relpaths(
@@ -252,12 +403,61 @@ color: {color}
         agents: list[AgentSpec],
         commands: list[CommandSpec],
     ) -> list[str]:
+        # settings.json is deliberately absent: it is shared with the user, so
+        # _remove_stale_claude_files must never delete it. Same precedent as the
+        # Codex adapter omitting config.toml.
         result: list[str] = []
         for agent_spec in agents:
             result.append(f"agents/{agent_spec.name}.md")
         for command_spec in commands:
             result.append(f"commands/{command_spec.name}.md")
         return result
+
+    def permission_rules(self) -> list[str]:
+        return list(_CLAUDE_PERMISSION_RULES)
+
+    def remove_entries(
+        self,
+        agents: list[AgentSpec],
+        commands: list[CommandSpec],
+        *,
+        rules: list[str] | None = None,
+    ) -> None:
+        """Strip our permission rules from settings.json, leaving the user's intact.
+
+        `rules` comes from the install manifest so an uninstall removes exactly what
+        that install wrote, even if the rule set has changed since.
+        """
+        settings_path = self.settings_path()
+        if not settings_path.exists():
+            return
+        try:
+            settings: dict[str, Any] = json.loads(
+                settings_path.read_text(encoding="utf-8")
+            )
+        except (json.JSONDecodeError, OSError):
+            return
+
+        to_remove = set(rules if rules is not None else _CLAUDE_PERMISSION_RULES)
+        permissions: dict[str, Any] = settings.get("permissions", {})
+        allow: list[str] = permissions.get("allow", [])
+        remaining = [rule for rule in allow if rule not in to_remove]
+        if remaining == allow:
+            return
+
+        if remaining:
+            permissions["allow"] = remaining
+        else:
+            permissions.pop("allow", None)
+            if not permissions:
+                settings.pop("permissions", None)
+
+        settings_path.write_text(
+            json.dumps(settings, indent=2) + "\n", encoding="utf-8"
+        )
+        print(
+            f"  updated: {settings_path} ({len(allow) - len(remaining)} rules removed)"
+        )
 
 
 class OpenCodeAdapter(TuiAdapter):
@@ -355,6 +555,8 @@ class OpenCodeAdapter(TuiAdapter):
         self,
         agents: list[AgentSpec],
         commands: list[CommandSpec],
+        *,
+        rules: list[str] | None = None,
     ) -> None:
         opencode_json_path = self.install_root() / "opencode.json"
         if not opencode_json_path.exists():

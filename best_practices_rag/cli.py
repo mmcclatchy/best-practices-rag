@@ -426,6 +426,33 @@ _CODEX_EXPECTED_FILES = [
 ]
 
 
+def _check_claude_permissions(claude_dir: Path) -> bool:
+    adapter = get_adapter(TuiKind.CLAUDE)
+    expected = adapter.permission_rules()
+    settings_path = claude_dir / "settings.json"
+
+    if not settings_path.exists():
+        print("  [FAIL] ~/.claude/settings.json — missing, no permission rules")
+        print("    Run: best-practices-rag setup --tui claude")
+        return False
+
+    try:
+        settings: dict[str, Any] = json.loads(settings_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        print(f"  [FAIL] ~/.claude/settings.json — unreadable: {exc}")
+        return False
+
+    allow = settings.get("permissions", {}).get("allow", [])
+    missing = [rule for rule in expected if rule not in allow]
+    if missing:
+        print(f"  [FAIL] Claude permissions — missing: {', '.join(missing)}")
+        print("    Run: best-practices-rag setup --tui claude")
+        return False
+
+    print(f"  [pass] Claude permissions ({len(expected)} rules)")
+    return True
+
+
 @app.command()
 def check(
     tui: str = typer.Option(
@@ -477,6 +504,9 @@ def check(
             else:
                 print(f"  [FAIL] ~/.claude/{f} — missing")
                 all_ok = False
+
+        if not _check_claude_permissions(claude_dir):
+            all_ok = False
 
     if check_opencode:
         opencode_root = Path.home() / ".config" / "opencode"
@@ -1173,6 +1203,7 @@ def uninstall(
         best-practices-rag uninstall --all
     """
     tui_targets = resolve_tui_targets(tui)
+    config_dir = Path.home() / ".config" / "best-practices-rag"
 
     if TuiKind.CLAUDE in tui_targets:
         claude_dir = Path.home() / ".claude"
@@ -1188,6 +1219,15 @@ def uninstall(
                 print(f"  removed: {f}")
             else:
                 print(f"  skip (missing): {f}")
+
+        # Strip exactly the permission rules this install wrote, per the manifest.
+        cc_adapter = get_adapter(TuiKind.CLAUDE)
+        cc_agents, cc_commands = build_specs(cc_adapter)
+        cc_adapter.remove_entries(
+            cc_agents,
+            cc_commands,
+            rules=_read_manifest(config_dir)["claude_permissions"],
+        )
 
     if TuiKind.OPENCODE in tui_targets:
         opencode_root = Path.home() / ".config" / "opencode"
@@ -1227,7 +1267,6 @@ def uninstall(
                 print(f"  skip (missing): {skill_dir}")
 
     if remove_all:
-        config_dir = Path.home() / ".config" / "best-practices-rag"
         if config_dir.exists():
             shutil.rmtree(config_dir)
             print(f"  removed dir: {config_dir}")
